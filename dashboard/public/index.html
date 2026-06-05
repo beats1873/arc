@@ -2087,12 +2087,16 @@ document.addEventListener('click', e => {
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 async function init() {
-  let authed = false;
+  const loadingEl = document.getElementById('loading');
   try {
+    console.log('[init] fetching /api/me');
     const res = await fetch('/api/me');
+    console.log('[init] /api/me status:', res.status);
+
     if (res.status === 401) { window.location.href = '/auth/login'; return; }
+
     const data = await res.json();
-    authed = true;
+    console.log('[init] selectedGuild:', data.selectedGuild?.id, '| guilds:', data.availableGuilds?.length);
 
     if (data.bot?.avatarUrl) document.getElementById('favicon').href = data.bot.avatarUrl;
     if (data.user?.avatarUrl) document.getElementById('user-avatar').src = data.user.avatarUrl;
@@ -2101,21 +2105,19 @@ async function init() {
 
     _availableGuilds = data.availableGuilds ?? [];
 
-    // No accessible guilds at all — re-auth
-    if (!_availableGuilds.length) { window.location.href = '/auth/login'; return; }
+    // No accessible guilds — session is stale or bot isn't in any server the user manages
+    if (!_availableGuilds.length) {
+      console.warn('[init] no available guilds');
+      loadingEl.innerHTML = `<div style="text-align:center;color:#dbdee1">
+        <h2 style="margin-bottom:12px">No Accessible Servers</h2>
+        <p style="color:#949ba4;margin-bottom:20px">You don't have Manage Server permission in any server this bot is in.</p>
+        <a href="/auth/logout" style="color:#5865f2;text-decoration:none;font-weight:600">Log out and try again</a></div>`;
+      return;
+    }
 
-    // No guild selected yet
+    // No guild selected — show picker regardless of how many guilds there are
     if (!data.selectedGuild) {
-      if (_availableGuilds.length === 1) {
-        try {
-          await api('POST', '/api/select-guild', { guildId: _availableGuilds[0].id });
-          window.location.reload();
-        } catch {
-          // Select failed — fall through to picker as safety net
-          showGuildPicker(_availableGuilds);
-        }
-        return;
-      }
+      console.log('[init] no guild selected, showing picker');
       showGuildPicker(_availableGuilds);
       return;
     }
@@ -2130,8 +2132,9 @@ async function init() {
       buildGuildDropdown();
     }
 
-    document.getElementById('loading').style.display = 'none';
+    loadingEl.style.display = 'none';
     document.getElementById('app').classList.add('ready');
+    console.log('[init] app ready, loading all sections');
     await loadAll();
 
     const saved = sessionStorage.getItem('activeSection');
@@ -2141,13 +2144,11 @@ async function init() {
       if (!READ_ONLY_SECTIONS.has(s.id)) watchDirty(s.id);
     });
   } catch (e) {
-    console.error('[init]', e);
-    if (!authed) return; // redirect in progress
-    // Always unhide loading so the user doesn't see a permanent blank screen
-    document.getElementById('loading').innerHTML =
-      `<div style="text-align:center;color:#dbdee1"><h2 style="margin-bottom:12px">Something went wrong</h2>
-       <p style="color:#949ba4;margin-bottom:20px">${e.message || 'Unknown error'}</p>
-       <a href="/auth/logout" style="color:#5865f2;text-decoration:none;font-weight:600">Log out and try again</a></div>`;
+    console.error('[init] error:', e);
+    loadingEl.innerHTML = `<div style="text-align:center;color:#dbdee1">
+      <h2 style="margin-bottom:12px">Something went wrong</h2>
+      <p style="color:#949ba4;margin-bottom:20px">${escHtml(e.message || 'Unknown error')}</p>
+      <a href="/auth/logout" style="color:#5865f2;text-decoration:none;font-weight:600">Log out and try again</a></div>`;
   }
 }
 
