@@ -27,14 +27,7 @@
 
   #sidebar { width: var(--sidebar-w); background: var(--sidebar); flex-shrink: 0; position: fixed; top: 0; left: 0; height: 100vh; overflow-y: auto; z-index: 100; transition: transform .25s; display: flex; flex-direction: column; }
   .sidebar-header { padding: 20px 16px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; position: relative; }
-  .sidebar-header.multi-guild { cursor: pointer; user-select: none; }
-  .sidebar-header.multi-guild:hover { background: rgba(255,255,255,.04); }
-  #guild-dropdown { background: var(--card2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); display: none; max-height: 240px; overflow-y: auto; }
-  .guild-dropdown-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; font-size: .875rem; font-weight: 500; transition: background .15s; }
-  .guild-dropdown-item:hover { background: rgba(255,255,255,.06); }
-  .guild-dropdown-item.active { color: var(--primary); }
-  .guild-dropdown-item img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-  .guild-dropdown-item .guild-initial { width: 28px; height: 28px; border-radius: 50%; background: var(--primary); display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+  #guild-select { color-scheme: dark; }
   /* Guild picker full-page overlay */
   #guild-picker { position: fixed; inset: 0; background: var(--bg); display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 24px; }
   #guild-picker.show { display: flex; }
@@ -83,16 +76,17 @@
   label { font-size: .8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
   input[type=text], input[type=number], input[type=password], input[type=date], select { background: var(--input-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 13px; color: var(--text); font-size: .9375rem; outline: none; transition: border-color .15s; width: 100%; }
   input[type=date] { color-scheme: dark; }
-  input:focus, select:focus { border-color: var(--primary); }
-  /* vanilla-picker overrides */
-  .picker_wrapper.popup { background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: 10px !important; box-shadow: 0 12px 32px rgba(0,0,0,.6) !important; z-index: 9999 !important; }
+  /* vanilla-picker swatch + popup theme */
+  .vp-wrap { display: inline-block; position: relative; }
+  .vp-wrap .picker_sample { width: 44px !important; height: 44px !important; border-radius: 8px !important; border: none !important; cursor: pointer !important; display: block !important; }
+  .picker_wrapper.popup { background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: 10px !important; box-shadow: 0 8px 32px rgba(0,0,0,.6) !important; z-index: 9999 !important; }
   .picker_arrow { display: none !important; }
-  .picker_sample { width: 44px !important; height: 44px !important; border-radius: 8px !important; border: none !important; cursor: pointer !important; box-shadow: none !important; display: block !important; }
-  .picker_hue, .picker_sl { border-radius: 6px !important; }
-  .picker_editor input { background: var(--input-bg) !important; color: var(--text) !important; border: 1px solid var(--border) !important; border-radius: 6px !important; font-family: inherit !important; font-size: .875rem !important; padding: 6px 10px !important; outline: none !important; }
+  .picker_sl, .picker_hue { border-radius: 6px !important; }
+  .picker_editor input { background: var(--input-bg) !important; color: var(--text) !important; border: 1px solid var(--border) !important; border-radius: 6px !important; font-family: inherit !important; font-size: .875rem !important; outline: none !important; }
   .picker_editor input:focus { border-color: var(--primary) !important; }
-  .picker_editor label { color: var(--muted) !important; font-size: .75rem !important; font-family: inherit !important; text-transform: uppercase !important; letter-spacing: .05em !important; }
-  .vp-wrap { display: inline-block; }
+  .picker_editor label { color: var(--muted) !important; font-size: .7rem !important; text-transform: uppercase !important; letter-spacing: .05em !important; }
+  input:focus, select:focus { border-color: var(--primary); }
+
 
   .feature-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
   .card > .feature-toggle-row:first-child { padding-top: 0; }
@@ -293,16 +287,15 @@
   <div id="overlay-bg" onclick="closeSidebar()"></div>
 
   <aside id="sidebar">
-    <div class="sidebar-header" id="guild-header" onclick="toggleGuildDropdown()">
+    <div class="sidebar-header" id="guild-header">
       <img id="guild-icon" class="bot-avatar" src="" alt="" style="display:none;flex-shrink:0">
       <div id="guild-icon-fallback" class="bot-avatar-placeholder" style="font-size:.85rem;flex-shrink:0">—</div>
       <div style="flex:1;min-width:0;overflow:hidden">
-        <div class="sidebar-title" id="guild-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Loading…</div>
         <div class="sidebar-subtitle" id="bot-name">Dashboard</div>
+        <select id="guild-select" onchange="switchGuild(this.value)" style="display:none;width:100%;background:transparent;border:none;color:var(--text);font-size:.875rem;font-weight:600;cursor:pointer;outline:none;padding:0;margin-top:2px;color-scheme:dark"></select>
+        <div class="sidebar-title" id="guild-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:none">Loading…</div>
       </div>
-      <i class="fa-solid fa-chevron-down" id="guild-chevron" style="display:none;color:var(--muted);font-size:.7rem;flex-shrink:0;transition:transform .2s"></i>
     </div>
-    <div id="guild-dropdown"></div>
     <nav>
       <div class="nav-group">Overview</div>
       <a onclick="show('stats')" class="active" data-section="stats"><span class="nav-icon"><i class="fa-solid fa-chart-bar"></i></span> Stats</a>
@@ -2026,28 +2019,20 @@ function renderGuildHeader(guild, botUsername) {
     fallback.style.display = 'flex';
     icon.style.display = 'none';
   }
-  document.getElementById('guild-name').textContent = guild.name;
-  document.getElementById('bot-name').textContent   = botUsername || 'Arcturus';
+  const nameEl = document.getElementById('guild-name');
+  nameEl.textContent  = guild.name;
+  nameEl.style.display = 'block'; // shown for single-guild; hidden by buildGuildSelect for multi
+  document.getElementById('bot-name').textContent = botUsername || 'Arcturus';
 }
 
-function buildGuildDropdown() {
-  const dd = document.getElementById('guild-dropdown');
-  dd.innerHTML = _availableGuilds.map(g => `
-    <div class="guild-dropdown-item${g.id === (window._selectedGuildId) ? ' active' : ''}" onclick="switchGuild('${g.id}')">
-      ${g.iconUrl
-        ? `<img src="${g.iconUrl}" alt="">`
-        : `<div class="guild-initial">${g.name.charAt(0).toUpperCase()}</div>`}
-      <span>${escHtml(g.name)}</span>
-    </div>`).join('');
-}
-
-function toggleGuildDropdown() {
-  if (_availableGuilds.length < 2) return;
-  _guildDropdownOpen = !_guildDropdownOpen;
-  const dd = document.getElementById('guild-dropdown');
-  const chevron = document.getElementById('guild-chevron');
-  dd.style.display = _guildDropdownOpen ? 'block' : 'none';
-  chevron.style.transform = _guildDropdownOpen ? 'rotate(180deg)' : '';
+function buildGuildSelect() {
+  const sel = document.getElementById('guild-select');
+  if (!sel) return;
+  sel.innerHTML = _availableGuilds.map(g =>
+    `<option value="${g.id}"${g.id === window._selectedGuildId ? ' selected' : ''}>${escHtml(g.name)}</option>`
+  ).join('');
+  sel.style.display = 'block';
+  document.getElementById('guild-name').style.display = 'none';
 }
 
 async function switchGuild(guildId) {
@@ -2070,14 +2055,6 @@ function showGuildPicker(guilds) {
   document.getElementById('loading').style.display = 'none';
 }
 
-// Close dropdown when clicking outside
-document.addEventListener('click', e => {
-  if (_guildDropdownOpen && !document.getElementById('guild-header').contains(e.target)) {
-    _guildDropdownOpen = false;
-    document.getElementById('guild-dropdown').style.display = 'none';
-    document.getElementById('guild-chevron').style.transform = '';
-  }
-});
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 async function init() {
@@ -2120,11 +2097,7 @@ async function init() {
     window._selectedGuild   = data.selectedGuild;
     renderGuildHeader(data.selectedGuild, data.bot?.username);
 
-    if (_availableGuilds.length > 1) {
-      document.getElementById('guild-chevron').style.display = 'block';
-      document.getElementById('guild-header').classList.add('multi-guild');
-      buildGuildDropdown();
-    }
+    if (_availableGuilds.length > 1) buildGuildSelect();
 
     loadingEl.style.display = 'none';
     document.getElementById('app').classList.add('ready');
@@ -2147,6 +2120,14 @@ async function init() {
 }
 
 function logout() { window.location.href = '/auth/logout'; }
+
+// Sync a colour input value AND update its swatch button background
+function setColor(id, hex) {
+  const inp = document.getElementById(id);
+  const btn = document.getElementById('csb-' + id);
+  if (inp) inp.value = hex;
+  if (btn) btn.style.background = hex;
+}
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 let _currentSection = 'stats';
@@ -2482,13 +2463,13 @@ async function saveGeneral() {
 async function loadEmbeds() {
   try {
     const d = await api('GET', '/api/settings');
-    setVpColor('e-primary',       d.primaryColor        ?? '#5865F2');
-    setVpColor('e-success',       d.successColor        ?? '#57F287');
-    setVpColor('e-error',         d.errorColor          ?? '#ED4245');
-    setVpColor('e-warning',       d.warningColor        ?? '#FEE75C');
-    setVpColor('e-rank-accent',   d.rankAccentColor     ?? '#5865F2');
-    setVpColor('gw-color',        d.giveawayEmbedColor  ?? '#5865F2');
-    setVpColor('gw-winner-color', d.giveawayWinnerColor ?? '#57F287');
+    setColor('e-primary',       d.primaryColor        ?? '#5865F2');
+    setColor('e-success',       d.successColor        ?? '#57F287');
+    setColor('e-error',         d.errorColor          ?? '#ED4245');
+    setColor('e-warning',       d.warningColor        ?? '#FEE75C');
+    setColor('e-rank-accent',   d.rankAccentColor     ?? '#5865F2');
+    setColor('gw-color',        d.giveawayEmbedColor  ?? '#5865F2');
+    setColor('gw-winner-color', d.giveawayWinnerColor ?? '#57F287');
   } catch (e) { if (e.message !== 'unauth') toast(e.message, 'error'); }
 }
 async function saveEmbeds() {
@@ -2761,7 +2742,7 @@ async function loadWelcome() {
     document.getElementById('welcome-title').value   = d.welcomeTitle   ?? '';
     document.getElementById('welcome-body').value    = d.welcomeBody    ?? '';
     document.getElementById('welcome-footer').value  = d.welcomeFooter  ?? '';
-    setVpColor('welcome-color', d.welcomeColor ?? '#5865F2');
+    setColor('welcome-color', d.welcomeColor ?? '#5865F2');
     document.getElementById('welcome-mention').checked = d.welcomeMentionUser !== false;
   } catch (e) { if (e.message !== 'unauth') toast(e.message, 'error'); }
 }
@@ -3987,51 +3968,14 @@ function clearLogDisplay() {
   if (out) out.innerHTML = '<span style="color:#6b7280">Display cleared. Logs are still accumulating in memory.</span>';
 }
 </script>
-<script src="https://cdn.jsdelivr.net/npm/vanilla-picker@2/dist/vanilla-picker.min.js"></script>
-<script>
-// ── Vanilla-picker color swatches ─────────────────────────────────────────────
-const _vp = {};
 
-function setVpColor(id, hex) {
-  const inp = document.getElementById(id);
-  if (inp) inp.value = hex;
-  if (_vp[id]) _vp[id].setColor(hex);
-}
-
-function _makeVp(id, defaultHex) {
-  const parent = document.getElementById('vp-' + id);
-  if (!parent || !window.Picker) return;
-  const picker = new Picker({
-    parent,
-    color: document.getElementById(id)?.value || defaultHex,
-    alpha: false,
-    popup: 'bottom',
-    editor: true,
-    editorFormat: 'hex',
-    onChange(color) {
-      const hex = color.hex.slice(0, 7);
-      const inp = document.getElementById(id);
-      if (inp) inp.value = hex;
-    },
-  });
-  _vp[id] = picker;
-}
-
-if (window.Picker) {
-  [
-    ['e-primary',      '#5865F2'],
-    ['e-success',      '#57F287'],
-    ['e-error',        '#ED4245'],
-    ['e-warning',      '#FEE75C'],
-    ['e-rank-accent',  '#5865F2'],
-    ['gw-color',       '#5865F2'],
-    ['gw-winner-color','#57F287'],
-    ['welcome-color',  '#5865F2'],
-  ].forEach(([id, def]) => _makeVp(id, def));
-}
-</script>
 </body>
 </html>
+
+
+
+
+
 
 
 
