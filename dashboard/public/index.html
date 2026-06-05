@@ -6,6 +6,7 @@
 <title>Arcturus Dashboard</title>
 <link rel="icon" id="favicon" href="/favicon.ico" type="image/png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@simonweniger/pickr@1.9.1/dist/themes/nano.min.css">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -84,11 +85,20 @@
   input[type=text], input[type=number], input[type=password], input[type=date], select { background: var(--input-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 13px; color: var(--text); font-size: .9375rem; outline: none; transition: border-color .15s; width: 100%; }
   input[type=date] { color-scheme: dark; }
   input:focus, select:focus { border-color: var(--primary); }
-  input[type=color] { -webkit-appearance: none; appearance: none; width: 44px; height: 44px; padding: 3px; border: 2px solid var(--border); border-radius: 8px; background: var(--input-bg); cursor: pointer; transition: border-color .15s; flex-shrink: 0; }
-  input[type=color]:hover { border-color: var(--primary); }
-  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 4px; overflow: hidden; }
-  input[type=color]::-webkit-color-swatch { border: none; border-radius: 4px; }
-  input[type=color]::-moz-color-swatch { border: none; border-radius: 4px; }
+  /* Pickr button (the clickable swatch) */
+  .pcr-button { width: 44px !important; height: 44px !important; border-radius: 8px !important; border: none !important; cursor: pointer !important; box-shadow: none !important; }
+  .pcr-button::after { border-radius: 7px !important; }
+  .pcr-button::before { border-radius: 7px !important; }
+  /* Pickr popup panel — dark theme */
+  .pcr-app { background: var(--card) !important; border-radius: 10px !important; box-shadow: 0 8px 32px rgba(0,0,0,.6) !important; border: 1px solid var(--border) !important; }
+  .pcr-app .pcr-interaction { gap: 6px !important; }
+  .pcr-app .pcr-interaction input { background: var(--input-bg) !important; color: var(--text) !important; border: 1px solid var(--border) !important; border-radius: 6px !important; font-family: inherit !important; font-size: .8rem !important; }
+  .pcr-app .pcr-interaction input:focus { border-color: var(--primary) !important; outline: none !important; }
+  .pcr-app .pcr-interaction .pcr-save { background: var(--primary) !important; color: #fff !important; border-radius: 6px !important; font-family: inherit !important; font-weight: 600 !important; }
+  .pcr-app .pcr-interaction .pcr-cancel { background: var(--border) !important; color: var(--text) !important; border-radius: 6px !important; font-family: inherit !important; }
+  .pcr-app .pcr-interaction .pcr-save:hover { background: var(--primary-hover) !important; }
+  .pcr-app .pcr-selection .pcr-picker { border: 2px solid #fff !important; }
+  .pcr-app[data-theme=nano] { width: 220px !important; }
 
   .feature-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
   .card > .feature-toggle-row:first-child { padding-top: 0; }
@@ -277,16 +287,16 @@
 <body>
 <div id="loading"><div class="spinner"></div><p>Signing you in…</p></div>
 
+<!-- Guild picker — outside #app so it shows regardless of app visibility -->
+<div id="guild-picker">
+  <h2>Select a Server</h2>
+  <p>Choose which server you want to manage.</p>
+  <div class="guild-picker-list" id="guild-picker-list"></div>
+</div>
+
 <div id="app">
   <button id="hamburger" onclick="toggleSidebar()">☰</button>
   <div id="overlay-bg" onclick="closeSidebar()"></div>
-
-  <!-- Guild picker overlay (shown when multiple guilds, none yet selected) -->
-  <div id="guild-picker">
-    <h2>Select a Server</h2>
-    <p>Choose which server you want to manage.</p>
-    <div class="guild-picker-list" id="guild-picker-list"></div>
-  </div>
 
   <aside id="sidebar">
     <div class="sidebar-header" id="guild-header" onclick="toggleGuildDropdown()">
@@ -576,19 +586,19 @@
         <div class="color-grid">
           <div class="color-group" style="align-items:center">
             <label style="margin-bottom:8px">Primary</label>
-            <input type="color" id="e-primary">
+            <div id="pickr-e-primary"></div><input type="hidden" id="e-primary" value="#5865F2">
           </div>
           <div class="color-group" style="align-items:center">
             <label style="margin-bottom:8px">Success</label>
-            <input type="color" id="e-success">
+            <div id="pickr-e-success"></div><input type="hidden" id="e-success" value="#57F287">
           </div>
           <div class="color-group" style="align-items:center">
             <label style="margin-bottom:8px">Error</label>
-            <input type="color" id="e-error">
+            <div id="pickr-e-error"></div><input type="hidden" id="e-error" value="#ED4245">
           </div>
           <div class="color-group" style="align-items:center">
             <label style="margin-bottom:8px">Warning</label>
-            <input type="color" id="e-warning">
+            <div id="pickr-e-warning"></div><input type="hidden" id="e-warning" value="#FEE75C">
           </div>
         </div>
         <div class="btn-row" style="margin-top:16px">
@@ -605,11 +615,32 @@
         <div class="color-grid">
           <div class="color-group" style="align-items:center">
             <label style="margin-bottom:8px">Accent</label>
-            <input type="color" id="e-rank-accent">
+            <div id="pickr-e-rank-accent"></div><input type="hidden" id="e-rank-accent" value="#5865F2">
           </div>
         </div>
         <div class="btn-row" style="margin-top:16px">
           <button class="btn btn-primary" onclick="saveRankColors()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="feature-toggle-row">
+          <div>
+            <div class="feature-toggle-label"><i class="fa-solid fa-gift" style="color:var(--warning);margin-right:9px"></i>Giveaway</div>
+            <div class="feature-toggle-sub">Accent colours for giveaway entry embeds and winner announcement embeds.</div>
+          </div>
+        </div>
+        <div class="color-grid">
+          <div class="color-group" style="align-items:center">
+            <label style="margin-bottom:8px">Entry Embed</label>
+            <div id="pickr-gw-color"></div><input type="hidden" id="gw-color" value="#5865F2">
+          </div>
+          <div class="color-group" style="align-items:center">
+            <label style="margin-bottom:8px">Winner Embed</label>
+            <div id="pickr-gw-winner-color"></div><input type="hidden" id="gw-winner-color" value="#57F287">
+          </div>
+        </div>
+        <div class="btn-row" style="margin-top:16px">
+          <button class="btn btn-primary" onclick="saveGiveawayColors()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
         </div>
       </div>
     </section>
@@ -793,10 +824,6 @@
             <label>Reaction Emoji</label>
             <input type="text" id="gw-emoji" placeholder="🎉" maxlength="8">
           </div>
-          <div class="form-group">
-            <label>Embed Colour</label>
-            <input type="color" id="gw-color" value="#5865F2">
-          </div>
           <div class="form-group full">
             <p style="font-size:.8125rem;color:var(--muted);margin:0 0 10px">
               Available variables: <code>{prize}</code> — prize name &nbsp;·&nbsp; <code>{emoji}</code> — entry emoji
@@ -839,13 +866,9 @@
           Available variables: <code>{prize}</code> — prize name &nbsp;·&nbsp; <code>{winner}</code> — winner mention &nbsp;·&nbsp; <code>{entries}</code> — total entry count
         </p>
         <div class="form-grid">
-          <div class="form-group">
+          <div class="form-group full">
             <label>Title (blank = default)</label>
             <input type="text" id="gw-winner-title" placeholder="🎉 Giveaway Ended!">
-          </div>
-          <div class="form-group">
-            <label>Embed Colour</label>
-            <input type="color" id="gw-winner-color" value="#57F287">
           </div>
           <div class="form-group full">
             <label>Body Text (blank = shows prize/winner/entries fields only)</label>
@@ -903,7 +926,7 @@
           </div>
           <div class="form-group">
             <label>Embed Colour</label>
-            <input type="color" id="welcome-color" value="#5865F2">
+            <div id="pickr-welcome-color"></div><input type="hidden" id="welcome-color" value="#5865F2">
           </div>
           <div class="form-group full">
             <label>Title Override <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(supports {user}, {server})</span></label>
@@ -2077,10 +2100,15 @@ async function init() {
 
     _availableGuilds = data.availableGuilds ?? [];
 
-    // If no guild selected yet and multiple available, show the picker
+    // Edge case: session lost available guilds — re-auth
+    if (!_availableGuilds.length) {
+      window.location.href = '/auth/login';
+      return;
+    }
+
     if (!data.selectedGuild) {
       if (_availableGuilds.length === 1) {
-        // Edge case: auto-select via API (server should have done this, but handle it)
+        // Server should have auto-selected, but handle it client-side too
         await api('POST', '/api/select-guild', { guildId: _availableGuilds[0].id });
         window.location.reload();
         return;
@@ -2090,6 +2118,7 @@ async function init() {
     }
 
     window._selectedGuildId = data.selectedGuild.id;
+    window._selectedGuild   = data.selectedGuild;
     renderGuildHeader(data.selectedGuild, data.bot?.username);
 
     // Show chevron + make header clickable only when multiple guilds available
@@ -2260,15 +2289,13 @@ async function loadStats() {
         ? `<img src="${info.avatarUrl}" style="width:28px;height:28px;border-radius:50%;flex-shrink:0" loading="lazy">`
         : `<span style="width:28px;height:28px;border-radius:50%;background:var(--border);display:inline-block;flex-shrink:0"></span>`;
       const name = escHtml(info?.username ?? u.userId);
-      const url  = info?.profileUrl ?? `https://discord.com/users/${u.userId}`;
-      return `<a href="${url}" target="_blank" rel="noopener"
-                 style="color:var(--text);text-decoration:none;display:flex;align-items:center;gap:8px;min-width:0">
+      return `<div style="color:var(--text);display:flex;align-items:center;gap:8px;min-width:0">
                 ${avatar}
                 <span style="min-width:0">
                   <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</div>
                   <div style="font-size:.72rem;color:var(--muted);font-family:monospace">${escHtml(u.userId)}</div>
                 </span>
-              </a>`;
+              </div>`;
     };
 
     const fill = (tableId, rows, valKey, label = '') => {
@@ -2342,18 +2369,17 @@ async function loadTransactions() {
             : '';
           const label  = TX_LABELS[t.type] ?? t.type;
           const cssClass = TX_CSS[t.type] ?? '';
-          const profileUrl = info?.profileUrl ?? `https://discord.com/users/${t.userId}`;
           return `<tr>
             <td style="white-space:nowrap;color:var(--muted);font-size:.8rem">${new Date(t.date).toLocaleString()}</td>
             <td><span class="tx-type ${cssClass}">${label}</span></td>
             <td style="white-space:nowrap">
-              <a href="${escHtml(profileUrl)}" target="_blank" style="color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:7px">
+              <div style="color:var(--text);display:inline-flex;align-items:center;gap:7px">
                 ${avatar}
                 <span>
                   <div style="font-weight:600">${escHtml(info?.username ?? t.userId)}</div>
                   <div style="font-size:.72rem;color:var(--muted);font-family:monospace">${escHtml(t.userId)}</div>
                 </span>
-              </a>
+              </div>
             </td>
             <td style="font-weight:600;color:${t.amount >= 0 ? 'var(--success)' : 'var(--danger)'}">${t.amount >= 0 ? '+' : ''}${t.amount}</td>
             <td>${escHtml(t.item ?? '—')}</td>
@@ -2451,11 +2477,13 @@ async function saveGeneral() {
 async function loadEmbeds() {
   try {
     const d = await api('GET', '/api/settings');
-    document.getElementById('e-primary').value     = d.primaryColor     ?? '#5865F2';
-    document.getElementById('e-success').value     = d.successColor     ?? '#57F287';
-    document.getElementById('e-error').value       = d.errorColor       ?? '#ED4245';
-    document.getElementById('e-warning').value     = d.warningColor     ?? '#FEE75C';
-    document.getElementById('e-rank-accent').value = d.rankAccentColor  ?? '#5865F2';
+    setPickrColor('e-primary',       d.primaryColor        ?? '#5865F2');
+    setPickrColor('e-success',       d.successColor        ?? '#57F287');
+    setPickrColor('e-error',         d.errorColor          ?? '#ED4245');
+    setPickrColor('e-warning',       d.warningColor        ?? '#FEE75C');
+    setPickrColor('e-rank-accent',   d.rankAccentColor     ?? '#5865F2');
+    setPickrColor('gw-color',        d.giveawayEmbedColor  ?? '#5865F2');
+    setPickrColor('gw-winner-color', d.giveawayWinnerColor ?? '#57F287');
   } catch (e) { if (e.message !== 'unauth') toast(e.message, 'error'); }
 }
 async function saveEmbeds() {
@@ -2728,7 +2756,7 @@ async function loadWelcome() {
     document.getElementById('welcome-title').value   = d.welcomeTitle   ?? '';
     document.getElementById('welcome-body').value    = d.welcomeBody    ?? '';
     document.getElementById('welcome-footer').value  = d.welcomeFooter  ?? '';
-    document.getElementById('welcome-color').value   = d.welcomeColor   ?? '#5865F2';
+    setPickrColor('welcome-color', d.welcomeColor ?? '#5865F2');
     document.getElementById('welcome-mention').checked = d.welcomeMentionUser !== false;
   } catch (e) { if (e.message !== 'unauth') toast(e.message, 'error'); }
 }
@@ -2755,13 +2783,11 @@ async function loadGiveaways() {
     const [d, giveaways] = await Promise.all([api('GET', '/api/settings'), api('GET', '/api/giveaways').catch(() => [])]);
     document.getElementById('giveaway-enabled').checked = d.giveawayEnabled ?? false;
     document.getElementById('gw-emoji').value           = d.giveawayEmoji    ?? '🎉';
-    document.getElementById('gw-color').value           = d.giveawayEmbedColor ?? '#5865F2';
     document.getElementById('gw-header').value          = d.giveawayEmbedHeader ?? '';
     document.getElementById('gw-body').value            = d.giveawayEmbedBody   ?? '';
     document.getElementById('gw-footer').value          = d.giveawayEmbedFooter ?? '';
     document.getElementById('gw-winner-title').value    = d.giveawayWinnerTitle  ?? '';
     document.getElementById('gw-winner-body').value     = d.giveawayWinnerBody   ?? '';
-    document.getElementById('gw-winner-color').value    = d.giveawayWinnerColor  ?? '#57F287';
     giveawayRoles = d.giveawayRoles ?? [];
     refreshGiveawayRoleTags();
     populateRoleSelect('gw-role-input');
@@ -2779,9 +2805,8 @@ function addGiveawayRole() {
 async function saveGiveawaySettings() {
   try {
     await api('PATCH', '/api/settings', {
-      giveawayEnabled:    document.getElementById('giveaway-enabled').checked,
-      giveawayEmoji:      document.getElementById('gw-emoji').value || '🎉',
-      giveawayEmbedColor: document.getElementById('gw-color').value,
+      giveawayEnabled:     document.getElementById('giveaway-enabled').checked,
+      giveawayEmoji:       document.getElementById('gw-emoji').value || '🎉',
       giveawayEmbedHeader: document.getElementById('gw-header').value,
       giveawayEmbedBody:   document.getElementById('gw-body').value,
       giveawayEmbedFooter: document.getElementById('gw-footer').value,
@@ -2796,10 +2821,19 @@ async function saveGiveawayWinner() {
     await api('PATCH', '/api/settings', {
       giveawayWinnerTitle: document.getElementById('gw-winner-title').value,
       giveawayWinnerBody:  document.getElementById('gw-winner-body').value,
-      giveawayWinnerColor: document.getElementById('gw-winner-color').value,
     });
     toast('Winner embed saved!');
     markClean('giveaways');
+  } catch (e) { if (e.message !== 'unauth') toast(e.message, 'error'); }
+}
+async function saveGiveawayColors() {
+  try {
+    await api('PATCH', '/api/settings', {
+      giveawayEmbedColor:  document.getElementById('gw-color').value,
+      giveawayWinnerColor: document.getElementById('gw-winner-color').value,
+    });
+    toast('Giveaway colours saved!');
+    markClean('embeds');
   } catch (e) { if (e.message !== 'unauth') toast(e.message, 'error'); }
 }
 function fmtTimeRemaining(ms) {
@@ -3600,18 +3634,21 @@ function whPreview() {
 
   document.getElementById('dp-channel-label').textContent = channel ? '# ' + channel.name : '# channel';
 
-  const hasContent = content.trim();
-  const hasEmbeds  = currentEmbeds.length > 0;
+  const hasContent  = content.trim();
+  const hasEmbeds   = currentEmbeds.length > 0;
+  const hasIdentity = username || avatar;
 
-  if (!hasContent && !hasEmbeds) {
+  if (!hasContent && !hasEmbeds && !hasIdentity) {
     document.getElementById('dp-message').innerHTML = '<div class="dp-empty">Nothing to preview yet.<br>Add content or an embed.</div>';
     return;
   }
 
-  const displayName = username || 'Arcturus';
+  const guild       = window._selectedGuild;
+  const displayName = username || guild?.name || 'Arcturus';
+  const avatarSrc   = avatar   || guild?.iconUrl || null;
   const initial     = displayName.charAt(0).toUpperCase();
-  const avatarHtml  = avatar
-    ? `<img class="dp-avatar" src="${escHtml(avatar)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+  const avatarHtml  = avatarSrc
+    ? `<img class="dp-avatar" src="${escHtml(avatarSrc)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
     + `<div class="dp-avatar" style="display:none">${escHtml(initial)}</div>`
     : `<div class="dp-avatar">${escHtml(initial)}</div>`;
 
@@ -3765,6 +3802,7 @@ function renderEmbeds() {
     return;
   }
   container.innerHTML = currentEmbeds.map((e, i) => renderEmbedCard(e, i)).join('');
+  initEmbedColorPickers(container);
 }
 
 function renderEmbedCard(e, i) {
@@ -3794,7 +3832,8 @@ function renderEmbedCard(e, i) {
       <div class="embed-section-title" style="margin-bottom:10px">Colour</div>
       <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:60px">
         <label style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Colour</label>
-        <input type="color" data-field="color" value="${escHtml(e.color || '#5865F2')}" oninput="this.closest('.embed-card').style.borderLeftColor=this.value;whPreview()" style="width:44px;height:44px;border:2px solid var(--border);border-radius:8px;background:none;cursor:pointer;padding:0">
+        <div class="embed-pcr-trigger" data-color="${escHtml(e.color || '#5865F2')}"></div>
+        <input type="hidden" data-field="color" value="${escHtml(e.color || '#5865F2')}">
       </div>
 
       <div class="embed-section-title">Author <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></div>
@@ -3944,6 +3983,89 @@ function clearLogDisplay() {
   const out = document.getElementById('log-output');
   if (out) out.innerHTML = '<span style="color:#6b7280">Display cleared. Logs are still accumulating in memory.</span>';
 }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@simonweniger/pickr@1.9.1/dist/pickr.min.js"></script>
+<script>
+// ── Pickr color picker integration ───────────────────────────────────────────
+const _pickers = new Map();
+
+function _initPickr(triggerId, inputId, defaultColor) {
+  const triggerEl = document.getElementById(triggerId);
+  if (!triggerEl || !window.Pickr) return;
+  const pickr = Pickr.create({
+    el: triggerEl,
+    theme: 'nano',
+    default: defaultColor || '#5865F2',
+    defaultRepresentation: 'HEX',
+    components: {
+      preview: true, opacity: false, hue: true,
+      interaction: { hex: true, input: true, save: true, cancel: true }
+    }
+  });
+  pickr.on('save', color => {
+    if (!color) return;
+    const hex = color.toHEXA().toString();
+    const inp = document.getElementById(inputId);
+    if (inp) inp.value = hex;
+    pickr.hide();
+  });
+  pickr.on('cancel', () => pickr.hide());
+  _pickers.set(inputId, pickr);
+}
+
+function setPickrColor(inputId, hex) {
+  const inp = document.getElementById(inputId);
+  if (inp) inp.value = hex;
+  _pickers.get(inputId)?.setColor(hex, true);
+}
+
+function initEmbedColorPickers(container) {
+  if (!window.Pickr) return;
+  container.querySelectorAll('.embed-pcr-trigger').forEach(el => {
+    if (el._pickrInit) return;
+    el._pickrInit = true;
+    const hiddenInput = el.nextElementSibling;
+    const color = el.dataset.color || '#5865F2';
+    const pickr = Pickr.create({
+      el,
+      theme: 'nano',
+      default: color,
+      defaultRepresentation: 'HEX',
+      components: {
+        preview: true, opacity: false, hue: true,
+        interaction: { hex: true, input: true, save: true, cancel: true }
+      }
+    });
+    pickr.on('save', c => {
+      if (!c) return;
+      const hex = c.toHEXA().toString();
+      if (hiddenInput) hiddenInput.value = hex;
+      const card = el.closest('.embed-card');
+      if (card) card.style.borderLeftColor = hex;
+      pickr.hide();
+      whPreview();
+    });
+    pickr.on('cancel', () => pickr.hide());
+  });
+}
+
+// Called once after DOM + Pickr are both ready
+function initAllPickrs() {
+  if (!window.Pickr) return;
+  [
+    ['pickr-e-primary',      'e-primary',      '#5865F2'],
+    ['pickr-e-success',      'e-success',      '#57F287'],
+    ['pickr-e-error',        'e-error',        '#ED4245'],
+    ['pickr-e-warning',      'e-warning',      '#FEE75C'],
+    ['pickr-e-rank-accent',  'e-rank-accent',  '#5865F2'],
+    ['pickr-gw-color',       'gw-color',       '#5865F2'],
+    ['pickr-gw-winner-color','gw-winner-color','#57F287'],
+    ['pickr-welcome-color',  'welcome-color',  '#5865F2'],
+  ].forEach(([tid, iid, def]) => _initPickr(tid, iid, def));
+}
+
+// Run after Pickr script loads (fires after the main <script> block's init())
+initAllPickrs();
 </script>
 </body>
 </html>

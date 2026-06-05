@@ -807,8 +807,28 @@ app.get('/api/webhooks', requireAuth, async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Fetch a guild's display name and icon as a base64 data URL (for webhook creation).
+async function getGuildIdentity(guildId) {
+  try {
+    const guild = discordClient.guilds.cache.get(guildId) ?? await discordClient.guilds.fetch(guildId);
+    if (!guild) return { name: null, iconUrl: null, iconDataUrl: null };
+    const iconUrl = guild.iconURL({ size: 128, extension: 'png' });
+    let iconDataUrl = null;
+    if (iconUrl) {
+      try {
+        const resp = await axios.get(iconUrl, { responseType: 'arraybuffer' });
+        iconDataUrl = `data:image/png;base64,${Buffer.from(resp.data).toString('base64')}`;
+      } catch { /* non-fatal — webhook will just have no avatar */ }
+    }
+    return { name: guild.name, iconUrl, iconDataUrl };
+  } catch {
+    return { name: null, iconUrl: null, iconDataUrl: null };
+  }
+}
+
 // Returns { url, webhookId } — creates a bot-owned webhook on the channel if none exists yet.
-async function getOrCreateChannelWebhook(channelId, storedWebhookId) {
+// Option B: new webhooks are created with the guild's name and icon as the default identity.
+async function getOrCreateChannelWebhook(channelId, storedWebhookId, guildId) {
   const channel = discordClient.channels.cache.get(channelId) ?? await discordClient.channels.fetch(channelId);
   const hooks = await channel.fetchWebhooks();
 
@@ -822,8 +842,13 @@ async function getOrCreateChannelWebhook(channelId, storedWebhookId) {
   const botOwned = hooks.find(h => h.owner?.id === discordClient.user.id);
   if (botOwned) return { url: botOwned.url, webhookId: botOwned.id };
 
-  // Create a new one
-  const created = await channel.createWebhook({ name: 'Arcturus Dashboard', reason: 'Created by Arcturus dashboard' });
+  // Create a new webhook using the guild's name and icon as defaults
+  const { name: guildName, iconDataUrl } = guildId ? await getGuildIdentity(guildId) : {};
+  const created = await channel.createWebhook({
+    name:   guildName || 'Arcturus Dashboard',
+    avatar: iconDataUrl ?? undefined,
+    reason: 'Created by Arcturus dashboard',
+  });
   return { url: created.url, webhookId: created.id };
 }
 
@@ -950,12 +975,21 @@ app.post('/api/webhooks/:id/send', requireAuth, async (req, res) => {
     if (!stored) return res.status(404).json({ error: 'Not found' });
     if (!discordClient) return res.status(503).json({ error: 'Bot not ready' });
 
-    const { url, webhookId } = await getOrCreateChannelWebhook(stored.channelId, stored.webhookId);
+    const { url, webhookId } = await getOrCreateChannelWebhook(stored.channelId, stored.webhookId, req.guildId);
     stored.webhookId = webhookId;
 
-    const avatarForPayload = await applyWebhookAvatar(url, stored.webhookAvatar, stored.webhookUsername);
+    // Option A: fall back to guild identity when no custom identity is set
+    let effectiveUsername = stored.webhookUsername;
+    let effectiveAvatar   = stored.webhookAvatar;
+    if (!effectiveUsername && !effectiveAvatar) {
+      const { name, iconUrl } = await getGuildIdentity(req.guildId);
+      effectiveUsername = name   || '';
+      effectiveAvatar   = iconUrl || '';
+    }
+
+    const avatarForPayload = await applyWebhookAvatar(url, effectiveAvatar, effectiveUsername);
     const { modifiedEmbeds, files } = collectLocalAttachments(stored.embeds);
-    const payload  = buildDiscordPayload(stored.content, modifiedEmbeds, stored.webhookUsername, avatarForPayload);
+    const payload  = buildDiscordPayload(stored.content, modifiedEmbeds, effectiveUsername, avatarForPayload);
     const response = await sendToWebhook(url, payload, files);
     stored.messageId = response.data.id;
     stored.updatedAt = new Date();
@@ -971,14 +1005,24 @@ app.post('/api/webhooks/:id/update', requireAuth, async (req, res) => {
     if (!stored.messageId) return res.status(400).json({ error: 'No message ID — send the message first' });
     if (!discordClient)    return res.status(503).json({ error: 'Bot not ready' });
 
-    const { url, webhookId } = await getOrCreateChannelWebhook(stored.channelId, stored.webhookId);
+    const { url, webhookId } = await getOrCreateChannelWebhook(stored.channelId, stored.webhookId, req.guildId);
     stored.webhookId = webhookId;
 
     const wh = parseWebhookUrl(url);
     if (!wh) return res.status(400).json({ error: 'Could not resolve webhook URL' });
-    const avatarForPayload = await applyWebhookAvatar(url, stored.webhookAvatar, stored.webhookUsername);
+
+    // Option A: fall back to guild identity when no custom identity is set
+    let effectiveUsername = stored.webhookUsername;
+    let effectiveAvatar   = stored.webhookAvatar;
+    if (!effectiveUsername && !effectiveAvatar) {
+      const { name, iconUrl } = await getGuildIdentity(req.guildId);
+      effectiveUsername = name   || '';
+      effectiveAvatar   = iconUrl || '';
+    }
+
+    const avatarForPayload = await applyWebhookAvatar(url, effectiveAvatar, effectiveUsername);
     const { modifiedEmbeds, files } = collectLocalAttachments(stored.embeds);
-    const payload = buildDiscordPayload(stored.content, modifiedEmbeds, stored.webhookUsername, avatarForPayload);
+    const payload = buildDiscordPayload(stored.content, modifiedEmbeds, effectiveUsername, avatarForPayload);
     if (files.length) {
       const form = new FormData();
       form.append('payload_json', JSON.stringify(payload));

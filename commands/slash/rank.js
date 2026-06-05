@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, AttachmentBuilder } from 'discord.js';
 import { getLevelData, getVoiceLevelData, getUserRank, getUserVoiceRank, getSettings, getUserBalance } from '../../data/database.js';
-import axios from 'axios';
+import { fetchAvatar } from '../../utils/imageCache.js';
 
 // Shared accent colours — keep these consistent with the leaderboard
 export const COLOUR_COINS = '#f0b232';   // gold
@@ -68,20 +68,22 @@ async function generateRankCard({ username, coins, avatarURL, chatLevel, chatXp,
   const avatarY = (H - AVA) / 2;
   const cx = avatarX + AVA / 2, cy = avatarY + AVA / 2;
 
+  const avatarBuf = await fetchAvatar(username, avatarURL);
   try {
-    const res = await axios.get(avatarURL, { responseType: 'arraybuffer' });
-    const img = await loadImage(Buffer.from(res.data));
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, AVA / 2, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.drawImage(img, avatarX, avatarY, AVA, AVA);
-    ctx.restore();
-    ctx.strokeStyle = color || '#5865f2';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(cx, cy, AVA / 2 + 3, 0, Math.PI * 2);
-    ctx.stroke();
+    if (avatarBuf) {
+      const img = await loadImage(avatarBuf);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, AVA / 2, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(img, avatarX, avatarY, AVA, AVA);
+      ctx.restore();
+      ctx.strokeStyle = color || '#5865f2';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, AVA / 2 + 3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   } catch { /* skip if avatar unavailable */ }
 
   // ── Username ─────────────────────────────────────────────────────────────
@@ -141,7 +143,7 @@ async function generateRankCard({ username, coins, avatarURL, chatLevel, chatXp,
       barColor: COLOUR_VOICE });
   }
 
-  return canvas.toBuffer('image/png');
+  return canvas.toBuffer('image/png', { compressionLevel: 0 });
 }
 
 function drawXpSection(ctx, { FONT, textX, barW, barH, sectionY, label, level, xp, required, barColor }) {
@@ -195,8 +197,9 @@ export default {
 
     const target  = interaction.options.getUser('user') ?? interaction.user;
     const guildId = interaction.guild.id;
-    await interaction.guild.members.fetch().catch(() => {});
-    const memberIds = interaction.guild.members.cache.map(m => m.user.id);
+    const guild = interaction.guild;
+    if (guild.members.cache.size < guild.memberCount) await guild.members.fetch().catch(() => {});
+    const memberIds = guild.members.cache.map(m => m.user.id);
 
     const [chat, voice, chatRank, voiceRank, settings, coins] = await Promise.all([
       getLevelData(target.id, guildId),

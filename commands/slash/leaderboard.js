@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, AttachmentBuilder, EmbedBuilder } from 'discord.js';
 import { User, getSettings, getLevelLeaderboard, getVoiceLevelLeaderboard, getLevelFromXP } from '../../data/database.js';
-import axios from 'axios';
+import { fetchAvatar } from '../../utils/imageCache.js';
 
 const COLOUR_COINS = '#f0b232';
 const COLOUR_VOICE = '#23a55a';
@@ -23,12 +23,6 @@ try {
   createCanvas = null;
 }
 
-async function fetchAvatar(url) {
-  try {
-    const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 3000 });
-    return Buffer.from(res.data);
-  } catch { return null; }
-}
 
 function clampText(ctx, text, maxWidth) {
   if (ctx.measureText(text).width <= maxWidth) return text;
@@ -96,7 +90,7 @@ async function generateLeaderboardImage({ coinsData, chatData, voiceData, color,
     secX: OUTER_PAD + xpSecW + COL_GAP, secY: xpSecY, secW: xpSecW, HEAD_H, ROW_H, showBar: true,
   });
 
-  return canvas.toBuffer('image/png');
+  return canvas.toBuffer('image/png', { compressionLevel: 0 });
 }
 
 async function drawSection(ctx, { FONT, entries, header, headerColor, secX, secY, secW, HEAD_H, ROW_H, showBar }) {
@@ -230,7 +224,7 @@ export default {
     await interaction.deferReply();
 
     const guild = interaction.guild;
-    await guild.members.fetch().catch(() => {});
+    if (guild.members.cache.size < guild.memberCount) await guild.members.fetch().catch(() => {});
     const memberIds = guild.members.cache.map(m => m.user.id);
     const settings  = await getSettings(guild.id);
     const colorHex  = settings.rankAccentColor ?? settings.primaryColor ?? '#5865f2';
@@ -252,8 +246,8 @@ export default {
         const member    = guild.members.cache.get(doc.userId);
         const user      = member?.user ?? await guild.client.users.fetch(doc.userId).catch(() => null);
         const name      = member?.displayName ?? user?.username ?? doc.userId;
-        const avatarURL = user?.displayAvatarURL({ extension: 'png', size: 64 });
-        const avatarBuf = avatarURL ? await fetchAvatar(avatarURL) : null;
+        const avatarURL = user?.displayAvatarURL({ extension: 'png', size: 32 });
+        const avatarBuf = avatarURL ? await fetchAvatar(doc.userId, avatarURL) : null;
         return { name, avatarBuf, value: getValue(doc), valueStr: getValueStr(doc) };
       }));
     }
