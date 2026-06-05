@@ -2087,30 +2087,33 @@ document.addEventListener('click', e => {
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 async function init() {
+  let authed = false;
   try {
-    const data = await fetch('/api/me').then(r => {
-      if (r.status === 401) { window.location.href = '/auth/login'; throw new Error('unauth'); }
-      return r.json();
-    });
+    const res = await fetch('/api/me');
+    if (res.status === 401) { window.location.href = '/auth/login'; return; }
+    const data = await res.json();
+    authed = true;
 
     if (data.bot?.avatarUrl) document.getElementById('favicon').href = data.bot.avatarUrl;
-    document.getElementById('user-avatar').src       = data.user.avatarUrl;
-    document.getElementById('user-name').textContent = data.user.username;
-    document.getElementById('bot-name').textContent  = data.bot?.username || 'Arcturus';
+    if (data.user?.avatarUrl) document.getElementById('user-avatar').src = data.user.avatarUrl;
+    if (data.user?.username)  document.getElementById('user-name').textContent = data.user.username;
+    document.getElementById('bot-name').textContent = data.bot?.username || 'Arcturus';
 
     _availableGuilds = data.availableGuilds ?? [];
 
-    // Edge case: session lost available guilds — re-auth
-    if (!_availableGuilds.length) {
-      window.location.href = '/auth/login';
-      return;
-    }
+    // No accessible guilds at all — re-auth
+    if (!_availableGuilds.length) { window.location.href = '/auth/login'; return; }
 
+    // No guild selected yet
     if (!data.selectedGuild) {
       if (_availableGuilds.length === 1) {
-        // Server should have auto-selected, but handle it client-side too
-        await api('POST', '/api/select-guild', { guildId: _availableGuilds[0].id });
-        window.location.reload();
+        try {
+          await api('POST', '/api/select-guild', { guildId: _availableGuilds[0].id });
+          window.location.reload();
+        } catch {
+          // Select failed — fall through to picker as safety net
+          showGuildPicker(_availableGuilds);
+        }
         return;
       }
       showGuildPicker(_availableGuilds);
@@ -2121,7 +2124,6 @@ async function init() {
     window._selectedGuild   = data.selectedGuild;
     renderGuildHeader(data.selectedGuild, data.bot?.username);
 
-    // Show chevron + make header clickable only when multiple guilds available
     if (_availableGuilds.length > 1) {
       document.getElementById('guild-chevron').style.display = 'block';
       document.getElementById('guild-header').classList.add('multi-guild');
@@ -2138,7 +2140,15 @@ async function init() {
     document.querySelectorAll('section[id]').forEach(s => {
       if (!READ_ONLY_SECTIONS.has(s.id)) watchDirty(s.id);
     });
-  } catch (e) { if (e.message !== 'unauth') console.error(e); }
+  } catch (e) {
+    console.error('[init]', e);
+    if (!authed) return; // redirect in progress
+    // Always unhide loading so the user doesn't see a permanent blank screen
+    document.getElementById('loading').innerHTML =
+      `<div style="text-align:center;color:#dbdee1"><h2 style="margin-bottom:12px">Something went wrong</h2>
+       <p style="color:#949ba4;margin-bottom:20px">${e.message || 'Unknown error'}</p>
+       <a href="/auth/logout" style="color:#5865f2;text-decoration:none;font-weight:600">Log out and try again</a></div>`;
+  }
 }
 
 function logout() { window.location.href = '/auth/logout'; }
