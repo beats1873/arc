@@ -76,15 +76,7 @@
   label { font-size: .8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
   input[type=text], input[type=number], input[type=password], input[type=date], select { background: var(--input-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 13px; color: var(--text); font-size: .9375rem; outline: none; transition: border-color .15s; width: 100%; }
   input[type=date] { color-scheme: dark; }
-  /* vanilla-picker swatch + popup theme */
-  .vp-wrap { display: inline-block; position: relative; }
-  .vp-wrap .picker_sample { width: 44px !important; height: 44px !important; border-radius: 8px !important; border: none !important; cursor: pointer !important; display: block !important; }
-  .picker_wrapper.popup { background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: 10px !important; box-shadow: 0 8px 32px rgba(0,0,0,.6) !important; z-index: 9999 !important; }
-  .picker_arrow { display: none !important; }
-  .picker_sl, .picker_hue { border-radius: 6px !important; }
-  .picker_editor input { background: var(--input-bg) !important; color: var(--text) !important; border: 1px solid var(--border) !important; border-radius: 6px !important; font-family: inherit !important; font-size: .875rem !important; outline: none !important; }
-  .picker_editor input:focus { border-color: var(--primary) !important; }
-  .picker_editor label { color: var(--muted) !important; font-size: .7rem !important; text-transform: uppercase !important; letter-spacing: .05em !important; }
+  input[type=color] { width: 44px; height: 44px; border-radius: 8px; border: none; padding: 0; cursor: pointer; background: transparent; color-scheme: dark; }
   input:focus, select:focus { border-color: var(--primary); }
 
 
@@ -573,19 +565,19 @@
         <div class="color-grid">
           <div class="color-group" style="align-items:center">
             <label style="margin-bottom:8px">Primary</label>
-            <span class="vp-wrap" id="vp-e-primary"></span><input type="hidden" id="e-primary" value="#5865F2">
+            <input type="color" id="e-primary" value="#5865F2">
           </div>
           <div class="color-group" style="align-items:center">
             <label style="margin-bottom:8px">Success</label>
-            <span class="vp-wrap" id="vp-e-success"></span><input type="hidden" id="e-success" value="#57F287">
+            <input type="color" id="e-success" value="#57F287">
           </div>
           <div class="color-group" style="align-items:center">
             <label style="margin-bottom:8px">Error</label>
-            <span class="vp-wrap" id="vp-e-error"></span><input type="hidden" id="e-error" value="#ED4245">
+            <input type="color" id="e-error" value="#ED4245">
           </div>
           <div class="color-group" style="align-items:center">
             <label style="margin-bottom:8px">Warning</label>
-            <span class="vp-wrap" id="vp-e-warning"></span><input type="hidden" id="e-warning" value="#FEE75C">
+            <input type="color" id="e-warning" value="#FEE75C">
           </div>
         </div>
         <div class="btn-row" style="margin-top:16px">
@@ -602,7 +594,7 @@
         <div class="color-grid">
           <div class="color-group" style="align-items:center">
             <label style="margin-bottom:8px">Accent</label>
-            <span class="vp-wrap" id="vp-e-rank-accent"></span><input type="hidden" id="e-rank-accent" value="#5865F2">
+            <input type="color" id="e-rank-accent" value="#5865F2">
           </div>
         </div>
         <div class="btn-row" style="margin-top:16px">
@@ -619,11 +611,11 @@
         <div class="color-grid">
           <div class="color-group" style="align-items:center">
             <label style="margin-bottom:8px">Entry Embed</label>
-            <span class="vp-wrap" id="vp-gw-color"></span><input type="hidden" id="gw-color" value="#5865F2">
+            <input type="color" id="gw-color" value="#5865F2">
           </div>
           <div class="color-group" style="align-items:center">
             <label style="margin-bottom:8px">Winner Embed</label>
-            <span class="vp-wrap" id="vp-gw-winner-color"></span><input type="hidden" id="gw-winner-color" value="#57F287">
+            <input type="color" id="gw-winner-color" value="#57F287">
           </div>
         </div>
         <div class="btn-row" style="margin-top:16px">
@@ -913,7 +905,7 @@
           </div>
           <div class="form-group">
             <label>Embed Colour</label>
-            <span class="vp-wrap" id="vp-welcome-color"></span><input type="hidden" id="welcome-color" value="#5865F2">
+            <input type="color" id="welcome-color" value="#5865F2">
           </div>
           <div class="form-group full">
             <label>Title Override <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(supports {user}, {server})</span></label>
@@ -2124,9 +2116,7 @@ function logout() { window.location.href = '/auth/logout'; }
 // Sync a colour input value AND update its swatch button background
 function setColor(id, hex) {
   const inp = document.getElementById(id);
-  const btn = document.getElementById('csb-' + id);
   if (inp) inp.value = hex;
-  if (btn) btn.style.background = hex;
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -3971,6 +3961,7 @@ function clearLogDisplay() {
 
 </body>
 </html>
+
 
 
 
