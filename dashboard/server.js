@@ -214,7 +214,12 @@ app.get('/auth/callback', async (req, res) => {
     // Auto-select when only one option — no picker needed
     if (accessibleGuilds.length === 1) req.session.guildId = accessibleGuilds[0].id;
 
-    res.redirect('/');
+    // Explicitly save session before redirecting so the cookie is guaranteed
+    // to be written before the browser follows the redirect to /
+    req.session.save(err => {
+      if (err) logger.error('Dashboard', 'Session save failed', err);
+      res.redirect('/');
+    });
   } catch (e) {
     logger.error('Dashboard', 'OAuth callback error', e.response?.data ?? e);
     res.redirect('/auth/login');
@@ -227,7 +232,13 @@ app.get('/auth/logout', (req, res) => {
 
 // Serve static files (index.html, etc.) only to authenticated users.
 // Registered after /auth/* routes so those are never caught by requireAuth.
-app.use(requireAuth, express.static(path.join(__dirname, 'public')));
+app.use(requireAuth, express.static(path.join(__dirname, 'public'), {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  },
+}));
 
 // ── Public API (requires session) ───────────────────────────────────────
 app.get('/api/me', requireAuth, (req, res) => {

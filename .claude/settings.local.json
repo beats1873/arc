@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(Get-ChildItem -Path C:\\\\Users\\\\lucas\\\\Desktop\\\\arcturus-main -Recurse -Directory | Select-Object -First 30 | ForEach-Object { $_.FullName })"
+      "PowerShell(Get-ChildItem -Path C:\\\\Users\\\\lucas\\\\Desktop\\\\arcturus-main -Recurse -Directory | Select-Object -First 30 | ForEach-Object { $_.FullName })",
+      "Bash(node --input-type=module)"
     ]
   }
 }
