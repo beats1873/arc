@@ -10,7 +10,7 @@ A feature-rich Discord bot built with **discord.js v14** and **MongoDB**, with a
 
 | Feature | Summary |
 |---|---|
-| 💰 Coin Economy | Daily/weekly rewards, visual leaderboard image, admin coin management |
+| 💰 Coin Economy | Daily/weekly rewards, configurable per-source daily coin caps, visual leaderboard image, admin coin management |
 | ⚡ XP & Leveling | Chat and voice XP tracked separately, visual rank card with coin balance and dual rank badges |
 | 🏆 Leaderboard | Image leaderboard: coins (full width), chat XP + voice XP side by side — top 5 each |
 | 🎂 Birthdays | Midnight announcements, birthday role, birthday coin claim |
@@ -36,7 +36,7 @@ The dashboard runs alongside the bot on port **3001** and covers every configura
 | Category | Sections |
 |---|---|
 | **Overview** | Stats, Transactions |
-| **Features** | Auto Role, Birthday, Booster, Giveaways, Hangman, Shop, Trivia, Welcome, Webhooks, XP & Leveling |
+| **Features** | Auto Role, Birthday, Booster, Economy, Giveaways, Hangman, Shop, Trivia, Welcome, Webhooks, XP & Leveling |
 | **Settings** | Settings, Colors |
 | **Help** | Logs, Documentation |
 
@@ -45,7 +45,8 @@ The dashboard runs alongside the bot on port **3001** and covers every configura
 | Section | What you can configure |
 |---|---|
 | **Stats** | Live server stats — members, coins, XP, 8 leaderboard charts (all-time + this week) |
-| **Transactions** | 30-day coin activity log with type filtering and CSV export |
+| **Transactions** | 30-day coin activity log — filter by type, user ID, and date range; CSV export respects active filters |
+| **Economy** | Per-source daily coin caps (Hangman, Trivia, Emotes, Level-Up) plus an overall daily ceiling; each cap has an independent enabled/disabled toggle |
 | **Auto Role** | Enabled toggle, role to automatically grant every new member on join |
 | **Birthday** | Announcement channel, timezone, birthday role, embed title/description/footer (supports `{member}`, `{mention}`, `{age}`) |
 | **Booster** | Announcement channel, embed title/description/footer (supports `{member}`, `{mention}`) |
@@ -152,6 +153,24 @@ Several embeds support dynamic variables that are replaced at send time:
 
 ---
 
+## Economy — Daily Coin Caps
+
+Coin earnings from automated sources can be limited per day, per source. Caps are configured from the **Economy** dashboard section and reset at midnight UTC.
+
+| Source | Cap setting | Default |
+|---|---|---|
+| Hangman | **Hangman Cap** | 50 (disabled) |
+| Trivia | **Trivia Cap** | 50 (disabled) |
+| Emotes | **Emote Cap** | 20 (disabled) |
+| Level-Up | **Level-Up Cap** | 50 (disabled) |
+| All sources combined | **Overall Daily Cap** | 100 (disabled) |
+
+Each source has an independent toggle. When a toggle is **off** the cap is not enforced, regardless of the configured value — so you can pre-configure a limit and enable it later without re-entering the number. When a user hits their cap the win/reward message is amended to notify them.
+
+The overall cap acts as a ceiling across all sources combined and is checked after per-source caps.
+
+---
+
 ## Transaction Types
 
 | Type | Source |
@@ -161,11 +180,24 @@ Several embeds support dynamic variables that are replaced at send time:
 | `Birthday` | `/birthday claim` |
 | `Trivia` | Correctly answering a trivia question |
 | `Hangman` | Winning a hangman game |
+| `Emote` | Using an emote reaction command |
 | `Level Up` | Reaching a new chat XP level |
 | `Add` | Admin `/addcoins` |
 | `Remove` | Admin `/removecoins` |
 | `Reset` | Admin `/resetcoins` |
 | `Purchase` | `/shop buy` |
+
+### Filtering transactions
+
+The **Transactions** dashboard section supports three independent filters that can be combined:
+
+| Filter | How to use |
+|---|---|
+| **Type** | Dropdown — select a specific transaction type or *All Types* |
+| **User ID** | Text field — paste a Discord user ID (17–20 digits) to show only that user's activity |
+| **Date range** | From / To date pickers — narrows results to a specific day or range; the ✕ button clears both dates |
+
+The **Export CSV** button always exports the currently filtered view, not the full 30-day log.
 
 ---
 

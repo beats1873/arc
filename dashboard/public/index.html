@@ -26,7 +26,26 @@
   #app.ready { display: flex; }
 
   #sidebar { width: var(--sidebar-w); background: var(--sidebar); flex-shrink: 0; position: fixed; top: 0; left: 0; height: 100vh; overflow-y: auto; z-index: 100; transition: transform .25s; display: flex; flex-direction: column; }
-  .sidebar-header { padding: 20px 16px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  .sidebar-header { padding: 20px 16px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; position: relative; }
+  .sidebar-header.multi-guild { cursor: pointer; user-select: none; }
+  .sidebar-header.multi-guild:hover { background: rgba(255,255,255,.04); }
+  #guild-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: var(--sidebar); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); z-index: 10; display: none; max-height: 260px; overflow-y: auto; }
+  .guild-dropdown-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; font-size: .875rem; font-weight: 500; transition: background .15s; }
+  .guild-dropdown-item:hover { background: rgba(255,255,255,.06); }
+  .guild-dropdown-item.active { color: var(--primary); }
+  .guild-dropdown-item img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+  .guild-dropdown-item .guild-initial { width: 28px; height: 28px; border-radius: 50%; background: var(--primary); display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+  /* Guild picker full-page overlay */
+  #guild-picker { position: fixed; inset: 0; background: var(--bg); display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 24px; }
+  #guild-picker.show { display: flex; }
+  #guild-picker h2 { font-size: 1.4rem; font-weight: 700; }
+  #guild-picker p { color: var(--muted); margin-top: -16px; font-size: .9rem; }
+  .guild-picker-list { display: flex; flex-direction: column; gap: 8px; width: 380px; max-width: 90vw; }
+  .guild-picker-item { display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: var(--card); border-radius: 10px; cursor: pointer; border: 2px solid transparent; transition: border-color .15s, background .15s; }
+  .guild-picker-item:hover { background: var(--card2); border-color: var(--primary); }
+  .guild-picker-item img { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+  .guild-picker-item .guild-pick-initial { width: 42px; height: 42px; border-radius: 50%; background: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 1rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .guild-picker-item-name { font-weight: 600; font-size: .9375rem; }
   .bot-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--border); flex-shrink: 0; object-fit: cover; }
   .bot-avatar-placeholder { width: 42px; height: 42px; border-radius: 50%; background: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; }
   .sidebar-title { font-weight: 700; font-size: .95rem; line-height: 1.2; }
@@ -62,13 +81,14 @@
   .form-group { display: flex; flex-direction: column; gap: 6px; }
   .form-group.full { grid-column: 1 / -1; }
   label { font-size: .8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-  input[type=text], input[type=number], input[type=password], select { background: var(--input-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 13px; color: var(--text); font-size: .9375rem; outline: none; transition: border-color .15s; width: 100%; }
+  input[type=text], input[type=number], input[type=password], input[type=date], select { background: var(--input-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 13px; color: var(--text); font-size: .9375rem; outline: none; transition: border-color .15s; width: 100%; }
+  input[type=date] { color-scheme: dark; }
   input:focus, select:focus { border-color: var(--primary); }
-  input[type=color] { -webkit-appearance: none; appearance: none; width: 44px; height: 44px; padding: 0; border: 2px solid var(--border); border-radius: 8px; background: none; cursor: pointer; transition: border-color .15s; flex-shrink: 0; }
+  input[type=color] { -webkit-appearance: none; appearance: none; width: 44px; height: 44px; padding: 3px; border: 2px solid var(--border); border-radius: 8px; background: var(--input-bg); cursor: pointer; transition: border-color .15s; flex-shrink: 0; }
   input[type=color]:hover { border-color: var(--primary); }
-  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 6px; }
-  input[type=color]::-webkit-color-swatch { border: none; border-radius: 6px; }
-  input[type=color]::-moz-color-swatch { border: none; border-radius: 6px; }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 4px; overflow: hidden; }
+  input[type=color]::-webkit-color-swatch { border: none; border-radius: 4px; }
+  input[type=color]::-moz-color-swatch { border: none; border-radius: 4px; }
 
   .feature-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
   .card > .feature-toggle-row:first-child { padding-top: 0; }
@@ -155,6 +175,13 @@
   .cmd-table tr:hover td { background: rgba(255,255,255,.02); }
   .cmd-table code { background: var(--card2); padding: 2px 7px; border-radius: 4px; font-family: 'Consolas', 'Monaco', monospace; font-size: .9em; color: var(--primary); white-space: nowrap; }
   .cmd-table td:last-child { color: var(--muted); }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+  #sidebar::-webkit-scrollbar { width: 3px; }
 
   #toast { position: fixed; bottom: 24px; right: 24px; z-index: 999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
   .toast-item { padding: 12px 18px; border-radius: 8px; font-size: .875rem; font-weight: 600; color: #fff; pointer-events: auto; box-shadow: 0 4px 16px rgba(0,0,0,.3); animation: slideIn .2s ease; }
@@ -254,15 +281,24 @@
   <button id="hamburger" onclick="toggleSidebar()">☰</button>
   <div id="overlay-bg" onclick="closeSidebar()"></div>
 
+  <!-- Guild picker overlay (shown when multiple guilds, none yet selected) -->
+  <div id="guild-picker">
+    <h2>Select a Server</h2>
+    <p>Choose which server you want to manage.</p>
+    <div class="guild-picker-list" id="guild-picker-list"></div>
+  </div>
+
   <aside id="sidebar">
-    <div class="sidebar-header">
-      <img id="bot-avatar" class="bot-avatar" src="" alt="" style="display:none">
-      <div id="bot-avatar-fallback" class="bot-avatar-placeholder">🌌</div>
-      <div>
-        <div class="sidebar-title" id="bot-name">Arcturus</div>
-        <div class="sidebar-subtitle">Dashboard</div>
+    <div class="sidebar-header" id="guild-header" onclick="toggleGuildDropdown()">
+      <img id="guild-icon" class="bot-avatar" src="" alt="" style="display:none;flex-shrink:0">
+      <div id="guild-icon-fallback" class="bot-avatar-placeholder" style="font-size:.85rem;flex-shrink:0">—</div>
+      <div style="flex:1;min-width:0;overflow:hidden">
+        <div class="sidebar-title" id="guild-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Loading…</div>
+        <div class="sidebar-subtitle" id="bot-name">Dashboard</div>
       </div>
+      <i class="fa-solid fa-chevron-down" id="guild-chevron" style="display:none;color:var(--muted);font-size:.7rem;flex-shrink:0;transition:transform .2s"></i>
     </div>
+    <div id="guild-dropdown"></div>
     <nav>
       <div class="nav-group">Overview</div>
       <a onclick="show('stats')" class="active" data-section="stats"><span class="nav-icon"><i class="fa-solid fa-chart-bar"></i></span> Stats</a>
@@ -1489,7 +1525,7 @@
       <!-- ECONOMY -->
       <div class="card docs-section" id="doc-economy">
         <h3><i class="fa-solid fa-coins" style="color:#f0b232"></i> Economy</h3>
-        <p>Arcturus has a full coin economy. Members earn coins from multiple sources — daily/weekly claims, game wins, birthday bonuses, and leveling up. Coins can be spent in the shop.</p>
+        <p>Arcturus has a full coin economy. Members earn coins from multiple sources — daily/weekly claims, game wins, emote reactions, birthday bonuses, and leveling up. Coins can be spent in the shop. Daily earning from automated sources can be capped per-source and overall from the <strong>Economy</strong> dashboard section.</p>
         <h4>Ways to Earn Coins</h4>
         <table class="cmd-table">
           <thead><tr><th>Source</th><th>Amount</th><th>How</th></tr></thead>
@@ -1497,11 +1533,25 @@
             <tr><td><code>/daily</code></td><td>+10</td><td>Once every 24 hours</td></tr>
             <tr><td><code>/weekly</code></td><td>+50</td><td>Once every 7 days</td></tr>
             <tr><td><code>/birthday claim</code></td><td>+1–100 (random)</td><td>Once per year, within one day of your birthday</td></tr>
-            <tr><td>Trivia win</td><td>+5</td><td>First correct answer to a trivia question</td></tr>
-            <tr><td>Hangman win</td><td>+lives remaining</td><td>Solving hangman — coins awarded equal the number of lives remaining at the time of win</td></tr>
+            <tr><td>Trivia win</td><td>Configurable (default +5)</td><td>First correct answer to a trivia question</td></tr>
+            <tr><td>Hangman win</td><td>+lives remaining</td><td>Solving hangman — coins equal the lives remaining at win</td></tr>
+            <tr><td>Emote</td><td>+1</td><td>Each emote reaction command used</td></tr>
             <tr><td>Level up</td><td>+10</td><td>Each time you reach a new chat XP level</td></tr>
           </tbody>
         </table>
+        <h4>Daily Coin Caps</h4>
+        <p>Configurable from <strong>Economy</strong> in the dashboard. All caps reset at midnight UTC. Each has an independent on/off toggle — disabling a cap does not clear its configured value.</p>
+        <table class="cmd-table">
+          <thead><tr><th>Cap</th><th>Applies to</th><th>Default value</th></tr></thead>
+          <tbody>
+            <tr><td>Overall Daily Cap</td><td>All automated sources combined</td><td>100 (off)</td></tr>
+            <tr><td>Hangman Cap</td><td>Hangman wins only</td><td>50 (off)</td></tr>
+            <tr><td>Trivia Cap</td><td>Trivia wins only</td><td>50 (off)</td></tr>
+            <tr><td>Emote Cap</td><td>Emote reactions only</td><td>20 (off)</td></tr>
+            <tr><td>Level-Up Cap</td><td>Level-up rewards only</td><td>50 (off)</td></tr>
+          </tbody>
+        </table>
+        <p>When a user hits their cap, the usual coin award message is replaced with a notification that their daily limit has been reached. If a cap partially limits a payout (e.g. only 3 coins remain before the cap), the reduced amount is still awarded and noted in the message.</p>
         <h4>Slash Commands</h4>
         <table class="cmd-table">
           <thead><tr><th>Command</th><th>Description</th></tr></thead>
@@ -1789,7 +1839,16 @@
       <!-- TRANSACTIONS -->
       <div class="card docs-section" id="doc-transactions">
         <h3><i class="fa-solid fa-receipt" style="color:var(--primary)"></i> Transaction Log</h3>
-        <p>Every coin movement is logged and kept for 30 days. You can filter by type, search by date, and export to CSV from the <strong>Transactions</strong> dashboard section.</p>
+        <p>Every coin movement is logged and kept for 30 days. Use the filters at the top of the <strong>Transactions</strong> section to narrow results, then export the filtered view as CSV.</p>
+        <h4>Filters</h4>
+        <table class="cmd-table">
+          <thead><tr><th>Filter</th><th>How to use</th></tr></thead>
+          <tbody>
+            <tr><td><strong>User ID</strong></td><td>Paste a Discord user ID (17–20 digits) to show only that member's activity.</td></tr>
+            <tr><td><strong>Type</strong></td><td>Dropdown — select a specific transaction type or <em>All Types</em>.</td></tr>
+            <tr><td><strong>From / To</strong></td><td>Date pickers that narrow results to a specific day or range. The ✕ button clears both dates. The <strong>Export CSV</strong> button always exports the currently filtered view.</td></tr>
+          </tbody>
+        </table>
         <h4>Transaction Types</h4>
         <table class="cmd-table">
           <thead><tr><th>Type</th><th>Source</th><th>Amount</th></tr></thead>
@@ -1799,6 +1858,7 @@
             <tr><td><code>Birthday</code></td><td><code>/birthday claim</code></td><td>+1–100 coins (random)</td></tr>
             <tr><td><code>Trivia</code></td><td>First correct trivia answer</td><td>Configurable (default +5 coins)</td></tr>
             <tr><td><code>Hangman</code></td><td>Winning a hangman game</td><td>+lives remaining at time of win</td></tr>
+            <tr><td><code>Emote</code></td><td>Using an emote reaction command</td><td>+1 coin (subject to daily cap)</td></tr>
             <tr><td><code>Level Up</code></td><td>Chat XP level-up</td><td>+10 coins</td></tr>
             <tr><td><code>Add</code></td><td>Admin <code>/addcoins</code></td><td>Variable (positive)</td></tr>
             <tr><td><code>Remove</code></td><td>Admin <code>/removecoins</code></td><td>Variable (negative)</td></tr>
@@ -1933,6 +1993,75 @@ window.addEventListener('beforeunload', e => {
   if (anyDirty()) { e.preventDefault(); e.returnValue = ''; }
 });
 
+// ── Guild selector ────────────────────────────────────────────────────────────
+let _availableGuilds = [];
+let _guildDropdownOpen = false;
+
+function renderGuildHeader(guild, botUsername) {
+  const icon = document.getElementById('guild-icon');
+  const fallback = document.getElementById('guild-icon-fallback');
+  if (guild.iconUrl) {
+    icon.src = guild.iconUrl;
+    icon.style.display = 'block';
+    fallback.style.display = 'none';
+  } else {
+    fallback.textContent = guild.name.charAt(0).toUpperCase();
+    fallback.style.display = 'flex';
+    icon.style.display = 'none';
+  }
+  document.getElementById('guild-name').textContent = guild.name;
+  document.getElementById('bot-name').textContent   = botUsername || 'Arcturus';
+}
+
+function buildGuildDropdown() {
+  const dd = document.getElementById('guild-dropdown');
+  dd.innerHTML = _availableGuilds.map(g => `
+    <div class="guild-dropdown-item${g.id === (window._selectedGuildId) ? ' active' : ''}" onclick="switchGuild('${g.id}')">
+      ${g.iconUrl
+        ? `<img src="${g.iconUrl}" alt="">`
+        : `<div class="guild-initial">${g.name.charAt(0).toUpperCase()}</div>`}
+      <span>${escHtml(g.name)}</span>
+    </div>`).join('');
+}
+
+function toggleGuildDropdown() {
+  if (_availableGuilds.length < 2) return;
+  _guildDropdownOpen = !_guildDropdownOpen;
+  const dd = document.getElementById('guild-dropdown');
+  const chevron = document.getElementById('guild-chevron');
+  dd.style.display = _guildDropdownOpen ? 'block' : 'none';
+  chevron.style.transform = _guildDropdownOpen ? 'rotate(180deg)' : '';
+}
+
+async function switchGuild(guildId) {
+  try {
+    await api('POST', '/api/select-guild', { guildId });
+    window.location.reload();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function showGuildPicker(guilds) {
+  const list = document.getElementById('guild-picker-list');
+  list.innerHTML = guilds.map(g => `
+    <div class="guild-picker-item" onclick="switchGuild('${g.id}')">
+      ${g.iconUrl
+        ? `<img src="${g.iconUrl}" alt="">`
+        : `<div class="guild-pick-initial">${g.name.charAt(0).toUpperCase()}</div>`}
+      <span class="guild-picker-item-name">${escHtml(g.name)}</span>
+    </div>`).join('');
+  document.getElementById('guild-picker').classList.add('show');
+  document.getElementById('loading').style.display = 'none';
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', e => {
+  if (_guildDropdownOpen && !document.getElementById('guild-header').contains(e.target)) {
+    _guildDropdownOpen = false;
+    document.getElementById('guild-dropdown').style.display = 'none';
+    document.getElementById('guild-chevron').style.transform = '';
+  }
+});
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 async function init() {
   try {
@@ -1940,25 +2069,43 @@ async function init() {
       if (r.status === 401) { window.location.href = '/auth/login'; throw new Error('unauth'); }
       return r.json();
     });
-    const botAvatar = document.getElementById('bot-avatar');
-    if (data.bot?.avatarUrl) {
-      botAvatar.src = data.bot.avatarUrl;
-      botAvatar.style.display = 'block';
-      document.getElementById('bot-avatar-fallback').style.display = 'none';
-    }
-    document.getElementById('bot-name').textContent    = data.bot?.username || 'Arcturus';
+
     if (data.bot?.avatarUrl) document.getElementById('favicon').href = data.bot.avatarUrl;
-    document.getElementById('user-avatar').src         = data.user.avatarUrl;
-    document.getElementById('user-name').textContent   = data.user.username;
-    document.getElementById('loading').style.display   = 'none';
+    document.getElementById('user-avatar').src       = data.user.avatarUrl;
+    document.getElementById('user-name').textContent = data.user.username;
+    document.getElementById('bot-name').textContent  = data.bot?.username || 'Arcturus';
+
+    _availableGuilds = data.availableGuilds ?? [];
+
+    // If no guild selected yet and multiple available, show the picker
+    if (!data.selectedGuild) {
+      if (_availableGuilds.length === 1) {
+        // Edge case: auto-select via API (server should have done this, but handle it)
+        await api('POST', '/api/select-guild', { guildId: _availableGuilds[0].id });
+        window.location.reload();
+        return;
+      }
+      showGuildPicker(_availableGuilds);
+      return;
+    }
+
+    window._selectedGuildId = data.selectedGuild.id;
+    renderGuildHeader(data.selectedGuild, data.bot?.username);
+
+    // Show chevron + make header clickable only when multiple guilds available
+    if (_availableGuilds.length > 1) {
+      document.getElementById('guild-chevron').style.display = 'block';
+      document.getElementById('guild-header').classList.add('multi-guild');
+      buildGuildDropdown();
+    }
+
+    document.getElementById('loading').style.display = 'none';
     document.getElementById('app').classList.add('ready');
     await loadAll();
 
-    // Restore last active section
     const saved = sessionStorage.getItem('activeSection');
     if (saved && document.getElementById(saved)) show(saved);
 
-    // Watch only settings sections for dirty changes (skip read-only pages)
     document.querySelectorAll('section[id]').forEach(s => {
       if (!READ_ONLY_SECTIONS.has(s.id)) watchDirty(s.id);
     });

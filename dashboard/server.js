@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import session from 'express-session';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -108,8 +108,20 @@ function requireAuth(req, res, next) {
   res.redirect('/auth/login');
 }
 
+// Guild scope middleware — enforces a guild is selected for data API routes.
+// Exempt: /api/me, /api/my-guilds, /api/select-guild, /api/logs, /api/questions, /api/uploads
+const _GUILD_EXEMPT = ['/api/me', '/api/my-guilds', '/api/select-guild', '/api/logs', '/api/questions', '/api/uploads'];
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next();
+  if (_GUILD_EXEMPT.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();
+  if (!req.session?.user) return next(); // unauthenticated — let requireAuth handle it
+  if (!req.session?.guildId) return res.status(403).json({ error: 'No server selected' });
+  req.guildId = req.session.guildId;
+  next();
+});
+
 // Favicon — proxy the bot's avatar (no auth needed)
-app.get('/favicon.ico', async (_req, res) => {
+app.get('/favicon.ico', async (req, res) => {
   if (!botInfo?.avatarUrl) return res.status(404).end();
   try {
     const response = await axios.get(botInfo.avatarUrl, { responseType: 'arraybuffer' });
@@ -147,7 +159,6 @@ app.get('/auth/callback', async (req, res) => {
   delete req.session.oauthState;
 
   try {
-    // Exchange code for tokens
     const tokenRes = await axios.post(`${DISCORD_API}/oauth2/token`, new URLSearchParams({
       client_id:     process.env.CLIENT_ID,
       client_secret: process.env.CLIENT_SECRET,
@@ -159,27 +170,36 @@ app.get('/auth/callback', async (req, res) => {
     const { access_token } = tokenRes.data;
     const authHeader = { Authorization: `Bearer ${access_token}` };
 
-    // Fetch user identity and guild list in parallel
     const [userRes, guildsRes] = await Promise.all([
       axios.get(`${DISCORD_API}/users/@me`, { headers: authHeader }),
       axios.get(`${DISCORD_API}/users/@me/guilds`, { headers: authHeader }),
     ]);
 
-    const user   = userRes.data;
-    const guilds = guildsRes.data;
+    const user       = userRes.data;
+    const userGuilds = guildsRes.data;
 
-    const targetGuild = guilds.find(g => g.id === GUILD_ID);
-    if (!targetGuild || !hasAdminAccess(targetGuild.permissions)) {
-      return res.send(`
-        <!DOCTYPE html><html><head><title>Access Denied</title>
-        <style>body{font-family:sans-serif;background:#1e1f22;color:#dbdee1;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}
-        a{color:#5865f2}</style></head>
-        <body><div>
-          <h2>Access Denied</h2>
-          <p>You need <strong>Manage Server</strong> or <strong>Administrator</strong> in the target guild.</p>
-          <a href="/auth/login">Try again</a>
-        </div></body></html>
-      `);
+    // Guilds the bot is currently in
+    const botGuildIds = discordClient
+      ? new Set(discordClient.guilds.cache.keys())
+      : (GUILD_ID ? new Set([GUILD_ID]) : new Set());
+
+    // Intersection: bot is present AND user has admin perms
+    const accessibleGuilds = userGuilds
+      .filter(g => botGuildIds.has(g.id) && hasAdminAccess(g.permissions))
+      .map(g => ({
+        id:      g.id,
+        name:    g.name,
+        iconUrl: g.icon
+          ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=64`
+          : null,
+      }));
+
+    if (!accessibleGuilds.length) {
+      return res.send(`<!DOCTYPE html><html><head><title>Access Denied</title>
+        <style>body{font-family:sans-serif;background:#1e1f22;color:#dbdee1;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}a{color:#5865f2}</style></head>
+        <body><div><h2>Access Denied</h2>
+        <p>You need <strong>Manage Server</strong> or <strong>Administrator</strong> in a server this bot is in.</p>
+        <a href="/auth/login">Try again</a></div></body></html>`);
     }
 
     req.session.user = {
@@ -189,6 +209,10 @@ app.get('/auth/callback', async (req, res) => {
         ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64`
         : `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(user.id) % 5n)}.png`,
     };
+    req.session.availableGuilds = accessibleGuilds;
+
+    // Auto-select when only one option — no picker needed
+    if (accessibleGuilds.length === 1) req.session.guildId = accessibleGuilds[0].id;
 
     res.redirect('/');
   } catch (e) {
@@ -207,12 +231,27 @@ app.use(requireAuth, express.static(path.join(__dirname, 'public')));
 
 // ── Public API (requires session) ───────────────────────────────────────
 app.get('/api/me', requireAuth, (req, res) => {
-  res.json({ user: req.session.user, bot: botInfo });
+  const available    = req.session.availableGuilds ?? [];
+  const selectedGuild = available.find(g => g.id === req.session.guildId) ?? null;
+  res.json({ user: req.session.user, bot: botInfo, selectedGuild, availableGuilds: available });
+});
+
+// Guild picker endpoints — no guild required
+app.get('/api/my-guilds', requireAuth, (req, res) => {
+  res.json({ guilds: req.session.availableGuilds ?? [], selectedGuildId: req.session.guildId ?? null });
+});
+
+app.post('/api/select-guild', requireAuth, (req, res) => {
+  const { guildId } = req.body;
+  const guild = (req.session.availableGuilds ?? []).find(g => g.id === guildId);
+  if (!guild) return res.status(403).json({ error: 'Not authorized for that server' });
+  req.session.guildId = guildId;
+  res.json({ ok: true, guild });
 });
 
 // Settings
-app.get('/api/settings', requireAuth, async (_req, res) => {
-  try { res.json(await getSettings(GUILD_ID)); }
+app.get('/api/settings', requireAuth, async (req, res) => {
+  try { res.json(await getSettings(req.guildId)); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -228,6 +267,7 @@ app.patch('/api/settings', requireAuth, async (req, res) => {
       'levelUpTitle', 'levelUpFooter',
       'birthdayTitle', 'birthdayFooter', 'birthdayDescription', 'birthdayRoleId',
       'boostTitle', 'boostFooter', 'boostDescription',
+      'rankAccentColor',
       'rankCardTitle', 'rankCardFooter', 'rankShowVoice',
       'leaderboardTitle', 'leaderboardSize',
       // Welcome
@@ -243,8 +283,8 @@ app.patch('/api/settings', requireAuth, async (req, res) => {
       'xpRoleBoosts', 'xpIgnoreChannels',
     ];
     const update = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
-    const result = await updateSettings(GUILD_ID, update);
-    invalidateConfig(GUILD_ID);
+    const result = await updateSettings(req.guildId, update);
+    invalidateConfig(req.guildId);
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -256,7 +296,7 @@ app.patch('/api/settings/xp', requireAuth, async (req, res) => {
     for (const k of allowed) {
       if (req.body[k] !== undefined) update[k] = Number(req.body[k]);
     }
-    res.json(await updateSettings(GUILD_ID, update));
+    res.json(await updateSettings(req.guildId, update));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -274,8 +314,8 @@ app.patch('/api/settings/economy', requireAuth, async (req, res) => {
     for (const k of enabledFields) {
       if (req.body[k] !== undefined) update[k] = Boolean(req.body[k]);
     }
-    const result = await updateSettings(GUILD_ID, update);
-    invalidateConfig(GUILD_ID);
+    const result = await updateSettings(req.guildId, update);
+    invalidateConfig(req.guildId);
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -284,14 +324,14 @@ app.patch('/api/settings/mod-roles', requireAuth, async (req, res) => {
   try {
     const { modRoles } = req.body;
     if (!Array.isArray(modRoles)) return res.status(400).json({ error: 'modRoles must be an array' });
-    res.json(await updateSettings(GUILD_ID, { modRoles }));
+    res.json(await updateSettings(req.guildId, { modRoles }));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Trivia
-app.get('/api/trivia', requireAuth, async (_req, res) => {
+app.get('/api/trivia', requireAuth, async (req, res) => {
   try {
-    const t = await TriviaSettings.findOne({ guildId: GUILD_ID }) ?? { channelId: null, interval: 60, modRoles: [] };
+    const t = await TriviaSettings.findOne({ guildId: req.guildId }) ?? { channelId: null, interval: 60, modRoles: [] };
     res.json(t);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -309,21 +349,21 @@ app.patch('/api/trivia', requireAuth, async (req, res) => {
     if (req.body.autoInterval        !== undefined) update.autoInterval        = Number(req.body.autoInterval);
     if (req.body.autoCoinReward             !== undefined) update.autoCoinReward             = Number(req.body.autoCoinReward);
     if (req.body.autoQuestionsPerSession    !== undefined) update.autoQuestionsPerSession    = Number(req.body.autoQuestionsPerSession);
-    const t = await TriviaSettings.findOneAndUpdate({ guildId: GUILD_ID }, { $set: update }, { upsert: true, new: true });
+    const t = await TriviaSettings.findOneAndUpdate({ guildId: req.guildId }, { $set: update }, { upsert: true, new: true });
     res.json(t);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Trivia session control
-app.get('/api/trivia/status', requireAuth, (_req, res) => {
-  res.json({ active: activeSessions.has(GUILD_ID) });
+app.get('/api/trivia/status', requireAuth, (req, res) => {
+  res.json({ active: activeSessions.has(req.guildId) });
 });
 
-app.post('/api/trivia/start', requireAuth, async (_req, res) => {
+app.post('/api/trivia/start', requireAuth, async (req, res) => {
   try {
     if (!discordClient) return res.status(503).json({ error: 'Bot not ready' });
-    const guild = discordClient.guilds.cache.get(GUILD_ID) ?? await discordClient.guilds.fetch(GUILD_ID);
-    const settings = await getTriviaSettings(GUILD_ID);
+    const guild = discordClient.guilds.cache.get(req.guildId) ?? await discordClient.guilds.fetch(req.guildId);
+    const settings = await getTriviaSettings(req.guildId);
     if (!settings.channelId) return res.status(400).json({ error: 'No trivia channel configured' });
     const result = await startTriviaSession(guild, settings);
     if (!result.ok) return res.status(400).json({ error: result.reason });
@@ -331,68 +371,68 @@ app.post('/api/trivia/start', requireAuth, async (_req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/trivia/stop', requireAuth, (_req, res) => {
-  const stopped = stopTriviaSession(GUILD_ID);
+app.post('/api/trivia/stop', requireAuth, (req, res) => {
+  const stopped = stopTriviaSession(req.guildId);
   res.json({ ok: stopped });
 });
 
 // Level roles
-app.get('/api/level-roles', requireAuth, async (_req, res) => {
-  try { res.json(await getLevelRoles(GUILD_ID)); }
+app.get('/api/level-roles', requireAuth, async (req, res) => {
+  try { res.json(await getLevelRoles(req.guildId)); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/level-roles', requireAuth, async (req, res) => {
   try {
     const { level, roleId } = req.body;
-    res.json(await setLevelRole(GUILD_ID, Number(level), roleId));
+    res.json(await setLevelRole(req.guildId, Number(level), roleId));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.delete('/api/level-roles/:level', requireAuth, async (req, res) => {
   try {
-    await removeLevelRole(GUILD_ID, Number(req.params.level));
+    await removeLevelRole(req.guildId, Number(req.params.level));
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Voice level roles
-app.get('/api/voice-roles', requireAuth, async (_req, res) => {
-  try { res.json(await getVoiceLevelRoles(GUILD_ID)); }
+app.get('/api/voice-roles', requireAuth, async (req, res) => {
+  try { res.json(await getVoiceLevelRoles(req.guildId)); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/voice-roles', requireAuth, async (req, res) => {
   try {
     const { level, roleId } = req.body;
-    res.json(await setVoiceLevelRole(GUILD_ID, Number(level), roleId));
+    res.json(await setVoiceLevelRole(req.guildId, Number(level), roleId));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.delete('/api/voice-roles/:level', requireAuth, async (req, res) => {
   try {
-    await removeVoiceLevelRole(GUILD_ID, Number(req.params.level));
+    await removeVoiceLevelRole(req.guildId, Number(req.params.level));
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Shop
-app.get('/api/shop', requireAuth, async (_req, res) => {
-  try { res.json(await getShopItems(GUILD_ID)); }
+app.get('/api/shop', requireAuth, async (req, res) => {
+  try { res.json(await getShopItems(req.guildId)); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/shop', requireAuth, async (req, res) => {
   try {
     const { name, cost, quantity, description, roleId } = req.body;
-    res.json(await addShopItem(GUILD_ID, name, Number(cost), quantity ? Number(quantity) : null, description || '', roleId || null));
+    res.json(await addShopItem(req.guildId, name, Number(cost), quantity ? Number(quantity) : null, description || '', roleId || null));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.patch('/api/shop/:name', requireAuth, async (req, res) => {
   try {
     const { name, cost, quantity, description, roleId } = req.body;
-    const updated = await updateShopItem(GUILD_ID, req.params.name, { name, cost, quantity, description, roleId });
+    const updated = await updateShopItem(req.guildId, req.params.name, { name, cost, quantity, description, roleId });
     if (!updated) return res.status(404).json({ error: 'Item not found' });
     res.json(updated);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -400,7 +440,7 @@ app.patch('/api/shop/:name', requireAuth, async (req, res) => {
 
 app.delete('/api/shop/:name', requireAuth, async (req, res) => {
   try {
-    await removeShopItem(GUILD_ID, req.params.name);
+    await removeShopItem(req.guildId, req.params.name);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -413,18 +453,32 @@ function getWeekStart() {
 }
 
 // Stats
-app.get('/api/stats', requireAuth, async (_req, res) => {
+app.get('/api/stats', requireAuth, async (req, res) => {
   try {
     const weekStart = getWeekStart();
 
+    // Resolve guild member IDs for scoping coin stats to this guild
+    let memberIds = null;
+    let totalMembers = null;
+    if (discordClient) {
+      try {
+        const guild = discordClient.guilds.cache.get(req.guildId) ?? await discordClient.guilds.fetch(req.guildId);
+        totalMembers = guild.memberCount;
+        // Use cache if reasonably populated; otherwise fetch
+        if (guild.members.cache.size < guild.memberCount * 0.5) await guild.members.fetch().catch(() => {});
+        memberIds = [...guild.members.cache.keys()];
+      } catch { /* non-fatal */ }
+    }
+
+    const userFilter = memberIds ? { userId: { $in: memberIds } } : {};
+
     const [topCoinsRaw, allLevel, totalUsers, allCoinsUsers, weeklyTxRaw] = await Promise.all([
-      User.find().sort({ coins: -1 }).limit(10),
-      getAllLevelUsers(GUILD_ID),
-      User.countDocuments(),
-      User.find({}, 'coins'),
-      // Aggregate positive coin amounts per user since this week's Sunday
+      User.find(userFilter).sort({ coins: -1 }).limit(10),
+      getAllLevelUsers(req.guildId),
+      memberIds ? User.countDocuments(userFilter) : User.countDocuments(),
+      User.find(userFilter, 'coins'),
       Transaction.aggregate([
-        { $match: { guildId: GUILD_ID, date: { $gte: weekStart }, amount: { $gt: 0 } } },
+        { $match: { guildId: req.guildId, date: { $gte: weekStart }, amount: { $gt: 0 } } },
         { $group: { _id: '$userId', earned: { $sum: '$amount' } } },
         { $sort: { earned: -1 } },
         { $limit: 10 },
@@ -441,11 +495,11 @@ app.get('/api/stats', requireAuth, async (_req, res) => {
     const topTotalXp = [...allLevel].sort((a, b) => ((b.xp ?? 0) + (b.voiceXp ?? 0)) - ((a.xp ?? 0) + (a.voiceXp ?? 0))).slice(0, 10);
 
     // Weekly XP snapshot — create if missing for this week
-    let snapshot = await XpWeekSnapshot.findOne({ guildId: GUILD_ID, weekStart });
+    let snapshot = await XpWeekSnapshot.findOne({ guildId: req.guildId, weekStart });
     if (!snapshot) {
       const baselines = allLevel.map(u => ({ userId: u.userId, chatXp: u.xp ?? 0, voiceXp: u.voiceXp ?? 0 }));
       snapshot = await XpWeekSnapshot.findOneAndUpdate(
-        { guildId: GUILD_ID, weekStart },
+        { guildId: req.guildId, weekStart },
         { $setOnInsert: { baselines } },
         { upsert: true, new: true }
       );
@@ -464,15 +518,6 @@ app.get('/api/stats', requireAuth, async (_req, res) => {
     const topWeeklyChatXp  = [...weeklyXpUsers].sort((a, b) => b.deltaChatXp  - a.deltaChatXp ).slice(0, 10).filter(u => u.deltaChatXp  > 0);
     const topWeeklyVoiceXp = [...weeklyXpUsers].sort((a, b) => b.deltaVoiceXp - a.deltaVoiceXp).slice(0, 10).filter(u => u.deltaVoiceXp > 0);
     const topWeeklyTotalXp = [...weeklyXpUsers].sort((a, b) => b.deltaTotalXp - a.deltaTotalXp).slice(0, 10).filter(u => u.deltaTotalXp > 0);
-
-    // Total Discord members
-    let totalMembers = null;
-    if (discordClient) {
-      try {
-        const guild = discordClient.guilds.cache.get(GUILD_ID) ?? await discordClient.guilds.fetch(GUILD_ID);
-        totalMembers = guild.memberCount;
-      } catch { /* non-fatal */ }
-    }
 
     // Collect all user IDs to resolve
     const allIds = [...new Set([
@@ -510,7 +555,7 @@ app.get('/api/stats', requireAuth, async (_req, res) => {
 });
 
 // Trivia questions
-app.get('/api/questions', requireAuth, (_req, res) => {
+app.get('/api/questions', requireAuth, (req, res) => {
   try { res.json(JSON.parse(readFileSync(QUESTIONS_PATH, 'utf8'))); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -555,7 +600,7 @@ app.delete('/api/questions/:id', requireAuth, (req, res) => {
 // Transactions — with resolved usernames (item 11)
 app.get('/api/transactions', requireAuth, async (req, res) => {
   try {
-    const filter = { guildId: GUILD_ID };
+    const filter = { guildId: req.guildId };
     if (req.query.type && req.query.type !== 'all') filter.type = req.query.type;
     if (req.query.userId && /^\d{17,20}$/.test(req.query.userId)) filter.userId = req.query.userId;
     const dateFilter = {};
@@ -574,7 +619,7 @@ app.get('/api/transactions', requireAuth, async (req, res) => {
 
 app.get('/api/transactions/export', requireAuth, async (req, res) => {
   try {
-    const filter = { guildId: GUILD_ID };
+    const filter = { guildId: req.guildId };
     if (req.query.type && req.query.type !== 'all') filter.type = req.query.type;
     if (req.query.userId && /^\d{17,20}$/.test(req.query.userId)) filter.userId = req.query.userId;
     const dateFilter = {};
@@ -594,15 +639,15 @@ app.get('/api/transactions/export', requireAuth, async (req, res) => {
 });
 
 // Import roles from Discord role assignments
-app.post('/api/import-roles', requireAuth, async (_req, res) => {
+app.post('/api/import-roles', requireAuth, async (req, res) => {
   try {
     if (!discordClient) return res.status(503).json({ error: 'Bot not ready' });
-    const guild = discordClient.guilds.cache.get(GUILD_ID) ?? await discordClient.guilds.fetch(GUILD_ID);
+    const guild = discordClient.guilds.cache.get(req.guildId) ?? await discordClient.guilds.fetch(req.guildId);
     await guild.members.fetch();
 
     const [chatRoles, voiceRoles] = await Promise.all([
-      getLevelRoles(GUILD_ID),
-      getVoiceLevelRoles(GUILD_ID),
+      getLevelRoles(req.guildId),
+      getVoiceLevelRoles(req.guildId),
     ]);
     if (!chatRoles.length && !voiceRoles.length) {
       return res.status(400).json({ error: 'No level roles configured. Add XP roles first.' });
@@ -613,14 +658,14 @@ app.post('/api/import-roles', requireAuth, async (_req, res) => {
       if (member.user.bot) continue;
       const highestChat = chatRoles.filter(r => member.roles.cache.has(r.roleId)).reduce((m, r) => Math.max(m, r.level), 0);
       if (highestChat > 0) {
-        const cur = await getLevelData(member.id, GUILD_ID);
-        if (cur.level < highestChat) { await setMinXPIfHigher(member.id, GUILD_ID, 'xp', minXPForLevel(highestChat)); chatUpdated++; }
+        const cur = await getLevelData(member.id, req.guildId);
+        if (cur.level < highestChat) { await setMinXPIfHigher(member.id, req.guildId, 'xp', minXPForLevel(highestChat)); chatUpdated++; }
         else skipped++;
       }
       const highestVoice = voiceRoles.filter(r => member.roles.cache.has(r.roleId)).reduce((m, r) => Math.max(m, r.level), 0);
       if (highestVoice > 0) {
-        const cur = await getVoiceLevelData(member.id, GUILD_ID);
-        if (cur.level < highestVoice) { await setMinXPIfHigher(member.id, GUILD_ID, 'voiceXp', minXPForLevel(highestVoice)); voiceUpdated++; }
+        const cur = await getVoiceLevelData(member.id, req.guildId);
+        if (cur.level < highestVoice) { await setMinXPIfHigher(member.id, req.guildId, 'voiceXp', minXPForLevel(highestVoice)); voiceUpdated++; }
       }
     }
     res.json({ chatUpdated, voiceUpdated, skipped });
@@ -629,10 +674,10 @@ app.post('/api/import-roles', requireAuth, async (_req, res) => {
 
 // ── Roles ────────────────────────────────────────────────────────────────────
 
-app.get('/api/roles', requireAuth, async (_req, res) => {
+app.get('/api/roles', requireAuth, async (req, res) => {
   try {
     if (!discordClient) return res.status(503).json({ error: 'Bot not ready' });
-    const guild = discordClient.guilds.cache.get(GUILD_ID) ?? await discordClient.guilds.fetch(GUILD_ID);
+    const guild = discordClient.guilds.cache.get(req.guildId) ?? await discordClient.guilds.fetch(req.guildId);
     await guild.roles.fetch();
     const roles = guild.roles.cache
       .filter(r => r.id !== guild.id) // exclude @everyone
@@ -661,7 +706,7 @@ app.post('/api/upload', requireAuth, express.json({ limit: '5mb' }), (req, res) 
 });
 
 // List uploaded media files (newest first)
-app.get('/api/uploads', requireAuth, (_req, res) => {
+app.get('/api/uploads', requireAuth, (req, res) => {
   try {
     const IMAGE_RE = /\.(png|jpe?g|gif|webp)$/i;
     const files = readdirSync(UPLOADS_DIR)
@@ -690,10 +735,10 @@ app.delete('/api/uploads/:filename', requireAuth, (req, res) => {
 
 // ── Channels ─────────────────────────────────────────────────────────────────
 
-app.get('/api/channels', requireAuth, async (_req, res) => {
+app.get('/api/channels', requireAuth, async (req, res) => {
   try {
     if (!discordClient) return res.status(503).json({ error: 'Bot not ready' });
-    const guild = discordClient.guilds.cache.get(GUILD_ID) ?? await discordClient.guilds.fetch(GUILD_ID);
+    const guild = discordClient.guilds.cache.get(req.guildId) ?? await discordClient.guilds.fetch(req.guildId);
     await guild.channels.fetch();
     const channels = guild.channels.cache
       .filter(c => c.type === 0 /* GUILD_TEXT */ || c.type === 5 /* GUILD_ANNOUNCEMENT */)
@@ -704,10 +749,10 @@ app.get('/api/channels', requireAuth, async (_req, res) => {
 });
 
 // All channels (text + voice) — used for the unified XP ignore list
-app.get('/api/channels/all', requireAuth, async (_req, res) => {
+app.get('/api/channels/all', requireAuth, async (req, res) => {
   try {
     if (!discordClient) return res.status(503).json({ error: 'Bot not ready' });
-    const guild = discordClient.guilds.cache.get(GUILD_ID) ?? await discordClient.guilds.fetch(GUILD_ID);
+    const guild = discordClient.guilds.cache.get(req.guildId) ?? await discordClient.guilds.fetch(req.guildId);
     await guild.channels.fetch();
     const TEXT_TYPES  = new Set([0, 5]);   // GUILD_TEXT, GUILD_ANNOUNCEMENT
     const VOICE_TYPES = new Set([2, 13]);  // GUILD_VOICE, GUILD_STAGE_VOICE
@@ -757,8 +802,8 @@ function parseWebhookUrl(url) {
   return m ? { id: m[1], token: m[2] } : null;
 }
 
-app.get('/api/webhooks', requireAuth, async (_req, res) => {
-  try { res.json(await WebhookMessage.find({ guildId: GUILD_ID }).sort({ updatedAt: -1 })); }
+app.get('/api/webhooks', requireAuth, async (req, res) => {
+  try { res.json(await WebhookMessage.find({ guildId: req.guildId }).sort({ updatedAt: -1 })); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -788,7 +833,7 @@ app.post('/api/webhooks', requireAuth, async (req, res) => {
     if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
     if (!channelId?.trim()) return res.status(400).json({ error: 'channelId is required' });
     const msg = await WebhookMessage.create({
-      guildId: GUILD_ID,
+      guildId: req.guildId,
       name: name.trim(),
       channelId: channelId.trim(),
       content: content || '',
@@ -806,7 +851,7 @@ app.put('/api/webhooks/:id', requireAuth, async (req, res) => {
     if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
     if (!channelId?.trim()) return res.status(400).json({ error: 'channelId is required' });
     const msg = await WebhookMessage.findOneAndUpdate(
-      { _id: req.params.id, guildId: GUILD_ID },
+      { _id: req.params.id, guildId: req.guildId },
       { $set: { name: name.trim(), channelId: channelId.trim(), content: content || '', embeds: embeds || [], webhookUsername: webhookUsername || '', webhookAvatar: webhookAvatar || '', updatedAt: new Date() } },
       { new: true }
     );
@@ -816,7 +861,7 @@ app.put('/api/webhooks/:id', requireAuth, async (req, res) => {
 });
 
 app.delete('/api/webhooks/:id', requireAuth, async (req, res) => {
-  try { await WebhookMessage.deleteOne({ _id: req.params.id, guildId: GUILD_ID }); res.json({ ok: true }); }
+  try { await WebhookMessage.deleteOne({ _id: req.params.id, guildId: req.guildId }); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -901,7 +946,7 @@ async function sendToWebhook(webhookUrl, payload, files) {
 
 app.post('/api/webhooks/:id/send', requireAuth, async (req, res) => {
   try {
-    const stored = await WebhookMessage.findOne({ _id: req.params.id, guildId: GUILD_ID });
+    const stored = await WebhookMessage.findOne({ _id: req.params.id, guildId: req.guildId });
     if (!stored) return res.status(404).json({ error: 'Not found' });
     if (!discordClient) return res.status(503).json({ error: 'Bot not ready' });
 
@@ -921,7 +966,7 @@ app.post('/api/webhooks/:id/send', requireAuth, async (req, res) => {
 
 app.post('/api/webhooks/:id/update', requireAuth, async (req, res) => {
   try {
-    const stored = await WebhookMessage.findOne({ _id: req.params.id, guildId: GUILD_ID });
+    const stored = await WebhookMessage.findOne({ _id: req.params.id, guildId: req.guildId });
     if (!stored)           return res.status(404).json({ error: 'Not found' });
     if (!stored.messageId) return res.status(400).json({ error: 'No message ID — send the message first' });
     if (!discordClient)    return res.status(503).json({ error: 'Bot not ready' });
@@ -952,15 +997,15 @@ app.post('/api/webhooks/:id/update', requireAuth, async (req, res) => {
 });
 
 // ── Trivia auto-engine API ──────────────────────────────────────────────────
-app.get('/api/trivia/auto/status', requireAuth, (_req, res) => {
-  res.json({ active: autoSessions.has(GUILD_ID) });
+app.get('/api/trivia/auto/status', requireAuth, (req, res) => {
+  res.json({ active: autoSessions.has(req.guildId) });
 });
 
-app.post('/api/trivia/auto/start', requireAuth, async (_req, res) => {
+app.post('/api/trivia/auto/start', requireAuth, async (req, res) => {
   try {
     if (!discordClient) return res.status(503).json({ error: 'Bot not ready' });
-    const guild    = discordClient.guilds.cache.get(GUILD_ID) ?? await discordClient.guilds.fetch(GUILD_ID);
-    const settings = await TriviaSettings.findOne({ guildId: GUILD_ID });
+    const guild    = discordClient.guilds.cache.get(req.guildId) ?? await discordClient.guilds.fetch(req.guildId);
+    const settings = await TriviaSettings.findOne({ guildId: req.guildId });
     if (!settings?.autoChannelId) return res.status(400).json({ error: 'No auto-trivia channel configured' });
     const result = await startAutoTrivia(guild, settings);
     if (!result.ok) return res.status(400).json({ error: result.reason });
@@ -968,15 +1013,15 @@ app.post('/api/trivia/auto/start', requireAuth, async (_req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/trivia/auto/stop', requireAuth, (_req, res) => {
-  const stopped = stopAutoTrivia(GUILD_ID);
+app.post('/api/trivia/auto/stop', requireAuth, (req, res) => {
+  const stopped = stopAutoTrivia(req.guildId);
   res.json({ ok: stopped });
 });
 
 // ── Giveaways API ────────────────────────────────────────────────────────────
 app.get('/api/giveaways', requireAuth, async (req, res) => {
   try {
-    const all    = await getAllGiveaways(GUILD_ID);
+    const all    = await getAllGiveaways(req.guildId);
     // Enrich with entrant count and time remaining
     const result = all.map(g => ({
       ...g.toObject(),
@@ -990,7 +1035,7 @@ app.get('/api/giveaways', requireAuth, async (req, res) => {
 app.post('/api/giveaways/:id/end', requireAuth, async (req, res) => {
   try {
     if (!discordClient) return res.status(503).json({ error: 'Bot not ready' });
-    const giveaway = await Giveaway.findOne({ _id: req.params.id, guildId: GUILD_ID });
+    const giveaway = await Giveaway.findOne({ _id: req.params.id, guildId: req.guildId });
     if (!giveaway) return res.status(404).json({ error: 'Not found' });
     if (giveaway.status === 'ended') return res.status(400).json({ error: 'Already ended' });
     await cancelGiveawayTimer(req.params.id);
@@ -1002,7 +1047,7 @@ app.post('/api/giveaways/:id/end', requireAuth, async (req, res) => {
 app.post('/api/giveaways/:id/reroll', requireAuth, async (req, res) => {
   try {
     if (!discordClient) return res.status(503).json({ error: 'Bot not ready' });
-    const giveaway = await Giveaway.findOne({ _id: req.params.id, guildId: GUILD_ID });
+    const giveaway = await Giveaway.findOne({ _id: req.params.id, guildId: req.guildId });
     if (!giveaway) return res.status(404).json({ error: 'Not found' });
     if (giveaway.status !== 'ended') return res.status(400).json({ error: 'Giveaway not ended yet' });
     const eligible = (giveaway.entries ?? []).filter(uid => uid !== giveaway.winnerUserId);
@@ -1010,7 +1055,7 @@ app.post('/api/giveaways/:id/reroll', requireAuth, async (req, res) => {
     const newWinner = eligible[Math.floor(Math.random() * eligible.length)];
     await Giveaway.findByIdAndUpdate(req.params.id, { winnerUserId: newWinner });
     // Announce in the original channel
-    const guild   = discordClient.guilds.cache.get(GUILD_ID) ?? await discordClient.guilds.fetch(GUILD_ID);
+    const guild   = discordClient.guilds.cache.get(req.guildId) ?? await discordClient.guilds.fetch(req.guildId);
     const channel = guild.channels.cache.get(giveaway.channelId) ?? await guild.channels.fetch(giveaway.channelId).catch(() => null);
     if (channel) {
       const { EmbedBuilder } = await import('discord.js');
@@ -1029,8 +1074,8 @@ app.patch('/api/settings/xp-boosts', requireAuth, async (req, res) => {
     const { xpRoleBoosts } = req.body;
     if (!Array.isArray(xpRoleBoosts)) return res.status(400).json({ error: 'xpRoleBoosts must be an array' });
     const cleaned = xpRoleBoosts.map(b => ({ roleId: String(b.roleId), multiplier: Number(b.multiplier) })).filter(b => b.roleId && b.multiplier > 0);
-    const result = await updateSettings(GUILD_ID, { xpRoleBoosts: cleaned });
-    invalidateConfig(GUILD_ID);
+    const result = await updateSettings(req.guildId, { xpRoleBoosts: cleaned });
+    invalidateConfig(req.guildId);
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1039,14 +1084,14 @@ app.patch('/api/settings/xp-ignore', requireAuth, async (req, res) => {
   try {
     const { xpIgnoreChannels } = req.body;
     if (!Array.isArray(xpIgnoreChannels)) return res.status(400).json({ error: 'xpIgnoreChannels must be an array' });
-    const result = await updateSettings(GUILD_ID, { xpIgnoreChannels });
-    invalidateConfig(GUILD_ID);
+    const result = await updateSettings(req.guildId, { xpIgnoreChannels });
+    invalidateConfig(req.guildId);
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Logs endpoint — streams in-memory ring buffer to the dashboard
-app.get('/api/logs', requireAuth, (_req, res) => {
+app.get('/api/logs', requireAuth, (req, res) => {
   res.json(getLogBuffer());
 });
 
@@ -1058,3 +1103,4 @@ export async function startDashboard(client) {
   const PORT = process.env.DASHBOARD_PORT || 3001;
   app.listen(PORT, () => logger.info('Dashboard', `Listening on http://localhost:${PORT}`));
 }
+
